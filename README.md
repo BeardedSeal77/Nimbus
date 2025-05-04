@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="public/images/logo.jpeg" alt="Project Logo" width="300"/>
+  <img src="public/images/logo.png" alt="Project Logo" width="300"/>
 </p>
 
 <h2 align="center">- Hasta La Vista, Pilot -</h2>
