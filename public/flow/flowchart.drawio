@@ -1,0 +1,208 @@
+<mxfile host="65bd71144e">
+    <diagram id="y12sq9UacOIsMTTaWXX6" name="Page-1">
+        <mxGraphModel dx="1473" dy="1627" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="4" style="edgeStyle=none;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="2">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="200" y="120" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="2" value="Voice" style="ellipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="40" y="80" width="120" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="7" style="edgeStyle=none;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="5" target="6">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="9" style="edgeStyle=none;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="5" target="8">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="5" value="&lt;span style=&quot;color: rgb(0, 0, 0);&quot;&gt;Local Speech-to-Text&lt;/span&gt;" style="shape=process;whiteSpace=wrap;html=1;backgroundOutline=1;" vertex="1" parent="1">
+                    <mxGeometry x="200" y="90" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="15" style="edgeStyle=none;html=1;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" source="6" target="5">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="6" value="&lt;div&gt;PYTHON&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;most are based on Open AI&#39;s Whisper&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;SYSTRAN/faster-whisper&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;Vaibhavs10/insanely-fast-whisper&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;huggingface/distil-whisper&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;WhisperSpeech/WhisperSpeech&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;align=center;" vertex="1" parent="1">
+                    <mxGeometry x="165" y="190" width="190" height="180" as="geometry"/>
+                </mxCell>
+                <mxCell id="13" style="edgeStyle=none;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="8" target="11">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="19" style="edgeStyle=none;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="8" target="18">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="8" value="Ollama&lt;div&gt;LLM&lt;/div&gt;" style="shape=process;whiteSpace=wrap;html=1;backgroundOutline=1;" vertex="1" parent="1">
+                    <mxGeometry x="400" y="90" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="14" style="edgeStyle=none;html=1;exitX=0.5;exitY=0;exitDx=0;exitDy=0;" edge="1" parent="1" source="11">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="459.9411764705883" y="150" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="11" value="PYTHON&lt;br&gt;&lt;br&gt;Locally ran LLM&lt;br&gt;&lt;br&gt;Takes transcript and provides a structured output command" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;" vertex="1" parent="1">
+                    <mxGeometry x="365" y="190" width="190" height="180" as="geometry"/>
+                </mxCell>
+                <mxCell id="17" style="edgeStyle=none;html=1;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" source="16" target="2">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="16" value="&quot;Go to the chair&quot;" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="40" y="190" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="21" style="edgeStyle=none;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="18" target="20">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="18" value="output logic" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+                    <mxGeometry x="580" y="90" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="20" value="&lt;div&gt;&lt;font color=&quot;#000000&quot;&gt;{&lt;/font&gt;&lt;/div&gt;&lt;div&gt;&lt;font color=&quot;#000000&quot;&gt;&amp;nbsp; &quot;intent&quot;: &quot;Go&quot;,&lt;/font&gt;&lt;/div&gt;&lt;div&gt;&lt;font color=&quot;#000000&quot;&gt;&amp;nbsp; &quot;target_object&quot;: &quot;chair&quot;&lt;/font&gt;&lt;/div&gt;&lt;div&gt;&lt;font color=&quot;#000000&quot;&gt;}&lt;/font&gt;&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;align=left;" vertex="1" parent="1">
+                    <mxGeometry x="570" y="190" width="140" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="22" value="" style="endArrow=none;dashed=1;html=1;" edge="1" parent="1">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint y="400" as="sourcePoint"/>
+                        <mxPoint x="850" y="400" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="23" value="&lt;font style=&quot;font-size: 24px;&quot;&gt;NLP&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="40" y="10" width="60" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="24" value="&lt;font style=&quot;font-size: 24px;&quot;&gt;OBJECT DETECTION&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="40" y="410" width="280" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="36" style="edgeStyle=none;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="25" target="28">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="37" style="edgeStyle=none;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="25" target="33">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="230" y="520"/>
+                            <mxPoint x="230" y="700"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="25" value="video" style="ellipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="40" y="480" width="120" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="27" style="edgeStyle=none;html=1;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" source="26" target="25">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="26" value="real time video feed from drone&lt;div&gt;(preferrably stereo)&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="40" y="600" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="31" style="edgeStyle=none;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="28" target="29">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="51" style="edgeStyle=none;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="28" target="50">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="590" y="520"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="28" value="Object Detection" style="shape=process;whiteSpace=wrap;html=1;backgroundOutline=1;" vertex="1" parent="1">
+                    <mxGeometry x="450" y="490" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="30" style="edgeStyle=none;html=1;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" source="29" target="28">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="29" value="PYTHON&lt;br&gt;&lt;br&gt;YOLOv8" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="450" y="580" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="53" style="edgeStyle=none;html=1;exitX=0;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="33" target="35">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="58" style="edgeStyle=none;html=1;exitX=1;exitY=1;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="33" target="38">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="420" y="790"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="33" value="Depth Estimation" style="shape=process;whiteSpace=wrap;html=1;backgroundOutline=1;" vertex="1" parent="1">
+                    <mxGeometry x="300" y="670" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="54" style="edgeStyle=none;html=1;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" source="35" target="33">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="35" value="PYTHON&lt;br&gt;Stereo Video&lt;div&gt;OpenCV&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="240" y="760" width="120" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="40" style="edgeStyle=none;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="38" target="39">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="38" value="output logic" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+                    <mxGeometry x="540" y="760" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="39" value="&lt;div style=&quot;text-align: left;&quot;&gt;&lt;font&gt;{&lt;/font&gt;&lt;/div&gt;&lt;div style=&quot;text-align: left;&quot;&gt;&lt;font&gt;&amp;nbsp; &quot;object&quot;: &quot;chair&quot;,&lt;/font&gt;&lt;/div&gt;&lt;div style=&quot;text-align: left;&quot;&gt;&lt;font&gt;&amp;nbsp; &quot;bbox&quot;: [x1, y1, x2, y2],&lt;/font&gt;&lt;/div&gt;&lt;div style=&quot;text-align: left;&quot;&gt;&lt;font&gt;&amp;nbsp; &quot;depth&quot;: 2.3&amp;nbsp; // meters&lt;/font&gt;&lt;/div&gt;&lt;div style=&quot;text-align: left;&quot;&gt;&lt;font&gt;}&lt;/font&gt;&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="525" y="840" width="150" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="47" style="edgeStyle=none;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="41" target="42">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="320" y="620"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="41" value="&lt;div&gt;&lt;font color=&quot;#000000&quot;&gt;{&lt;/font&gt;&lt;/div&gt;&lt;div&gt;&lt;font color=&quot;#000000&quot;&gt;&amp;nbsp; &quot;intent&quot;: &quot;Go&quot;,&lt;/font&gt;&lt;/div&gt;&lt;div&gt;&lt;font color=&quot;#000000&quot;&gt;&amp;nbsp; &quot;target_object&quot;: &quot;chair&quot;&lt;/font&gt;&lt;/div&gt;&lt;div&gt;&lt;font color=&quot;#000000&quot;&gt;}&lt;/font&gt;&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;align=left;" vertex="1" parent="1">
+                    <mxGeometry x="250" y="530" width="140" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="44" style="edgeStyle=none;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="42" target="29">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="42" value="&quot;&lt;span style=&quot;color: rgb(0, 0, 0); text-align: left;&quot;&gt;chair&quot;&lt;/span&gt;" style="shape=process;whiteSpace=wrap;html=1;backgroundOutline=1;" vertex="1" parent="1">
+                    <mxGeometry x="360" y="600" width="70" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="52" style="edgeStyle=none;html=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="50" target="33">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="50" value="bounding box" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+                    <mxGeometry x="530" y="670" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="59" value="" style="endArrow=none;dashed=1;html=1;" edge="1" parent="1">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint y="960" as="sourcePoint"/>
+                        <mxPoint x="850" y="960" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="63" style="edgeStyle=none;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="60" target="62">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="60" value="Video" style="ellipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="45" y="1070" width="120" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="64" style="edgeStyle=none;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;" edge="1" parent="1" source="61">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="250" y="1110" as="targetPoint"/>
+                        <Array as="points">
+                            <mxPoint x="200" y="1220"/>
+                            <mxPoint x="200" y="1110"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="61" value="Drone Telemetry" style="ellipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="45" y="1180" width="120" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="62" value="RTAB-Map" style="shape=process;whiteSpace=wrap;html=1;backgroundOutline=1;" vertex="1" parent="1">
+                    <mxGeometry x="250" y="1080" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="65" value="&lt;h2 data-start=&quot;1671&quot; data-end=&quot;1734&quot; class=&quot;&quot;&gt;Option 3: ROS + RTAB-Map + Python via Docker (full stack)&lt;/h2&gt;&lt;br&gt;&lt;p data-start=&quot;1736&quot; data-end=&quot;1748&quot; class=&quot;&quot;&gt;You can run:&lt;/p&gt;&lt;br&gt;&lt;ul data-start=&quot;1749&quot; data-end=&quot;1947&quot;&gt;&lt;br&gt;&lt;li data-start=&quot;1749&quot; data-end=&quot;1800&quot; class=&quot;&quot;&gt;&lt;br&gt;&lt;p data-start=&quot;1751&quot; data-end=&quot;1800&quot; class=&quot;&quot;&gt;ROS2 + RTAB-Map inside a Docker container on WSL2&lt;/p&gt;&lt;br&gt;&lt;/li&gt;&lt;br&gt;&lt;li data-start=&quot;1801&quot; data-end=&quot;1876&quot; class=&quot;&quot;&gt;&lt;br&gt;&lt;p data-start=&quot;1803&quot; data-end=&quot;1876&quot; class=&quot;&quot;&gt;Use Python (rclpy)&amp;nbsp;outside the container to talk to it via a ROS bridge&lt;/p&gt;&lt;/li&gt;&lt;/ul&gt;" style="text;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="400" y="1020" width="560" height="330" as="geometry"/>
+                </mxCell>
+                <mxCell id="66" value="&lt;h2 data-start=&quot;3078&quot; data-end=&quot;3129&quot; class=&quot;&quot;&gt;✅ Subsystem 4: Motion Planning and Drone Control&lt;/h2&gt;&lt;br&gt;&lt;h3 data-start=&quot;3131&quot; data-end=&quot;3144&quot; class=&quot;&quot;&gt;📥 Input:&lt;/h3&gt;&lt;ul data-start=&quot;3145&quot; data-end=&quot;3237&quot;&gt;&lt;li data-start=&quot;3145&quot; data-end=&quot;3189&quot; class=&quot;&quot;&gt;&lt;p data-start=&quot;3147&quot; data-end=&quot;3189&quot; class=&quot;&quot;&gt;Drone current global position (from SLAM).&lt;/p&gt;&lt;/li&gt;&lt;li data-start=&quot;3190&quot; data-end=&quot;3237&quot; class=&quot;&quot;&gt;&lt;p data-start=&quot;3192&quot; data-end=&quot;3237&quot; class=&quot;&quot;&gt;Target object’s global position (from above).&lt;/p&gt;&lt;/li&gt;&lt;/ul&gt;&lt;h3 data-start=&quot;3239&quot; data-end=&quot;3254&quot; class=&quot;&quot;&gt;🔧 Process:&lt;/h3&gt;&lt;ul data-start=&quot;3255&quot; data-end=&quot;3422&quot;&gt;&lt;li data-start=&quot;3255&quot; data-end=&quot;3355&quot; class=&quot;&quot;&gt;&lt;p data-start=&quot;3257&quot; data-end=&quot;3355&quot; class=&quot;&quot;&gt;Use a &lt;strong data-start=&quot;3263&quot; data-end=&quot;3281&quot;&gt;PID controller&lt;/strong&gt; or &lt;strong data-start=&quot;3285&quot; data-end=&quot;3322&quot;&gt;model predictive controller (MPC)&lt;/strong&gt; to generate a smooth trajectory.&lt;/p&gt;&lt;/li&gt;&lt;li data-start=&quot;3356&quot; data-end=&quot;3422&quot; class=&quot;&quot;&gt;&lt;p data-start=&quot;3358&quot; data-end=&quot;3422&quot; class=&quot;&quot;&gt;Output commands: velocity/acceleration (depending on drone API).&lt;/p&gt;&lt;/li&gt;&lt;/ul&gt;&lt;br&gt;&lt;p data-start=&quot;3424&quot; data-end=&quot;3445&quot; class=&quot;&quot;&gt;For example (MAVSDK):&lt;/p&gt;&lt;p data-start=&quot;3424&quot; data-end=&quot;3445&quot; class=&quot;&quot;&gt;drone.offboard.set_velocity_ned(VelocityNedYaw(1.2, 0.0, -0.3, 0.0))&lt;/p&gt;&lt;pre class=&quot;overflow-visible!&quot; data-start=&quot;3446&quot; data-end=&quot;3528&quot;&gt;&lt;div class=&quot;contain-inline-size rounded-md border-[0.5px] border-token-border-medium relative bg-token-sidebar-surface-primary&quot;&gt;&lt;/div&gt;&lt;/pre&gt;" style="text;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="10" y="1370" width="710" height="420" as="geometry"/>
+                </mxCell>
+                <mxCell id="67" value="" style="endArrow=none;dashed=1;html=1;" edge="1" parent="1">
+                    <mxGeometry width="50" height="50" relative="1" as="geometry">
+                        <mxPoint y="1360" as="sourcePoint"/>
+                        <mxPoint x="850" y="1360" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="68" value="&lt;h2 data-start=&quot;3535&quot; data-end=&quot;3593&quot; class=&quot;&quot;&gt;✅ Subsystem 5: Feedback to User (Mixed Reality Overlay)&lt;/h2&gt;&lt;ul data-start=&quot;3595&quot; data-end=&quot;3819&quot;&gt;&lt;li data-start=&quot;3595&quot; data-end=&quot;3660&quot; class=&quot;&quot;&gt;&lt;p data-start=&quot;3597&quot; data-end=&quot;3660&quot; class=&quot;&quot;&gt;Overlay bounding box around the detected target object (chair).&lt;/p&gt;&lt;/li&gt;&lt;li data-start=&quot;3661&quot; data-end=&quot;3757&quot; class=&quot;&quot;&gt;&lt;p data-start=&quot;3663&quot; data-end=&quot;3689&quot; class=&quot;&quot;&gt;Use MR headset UI to show:&lt;/p&gt;&lt;ul data-start=&quot;3692&quot; data-end=&quot;3757&quot;&gt;&lt;li data-start=&quot;3692&quot; data-end=&quot;3710&quot; class=&quot;&quot;&gt;&lt;p data-start=&quot;3694&quot; data-end=&quot;3710&quot; class=&quot;&quot;&gt;Bounding Box&lt;/p&gt;&lt;/li&gt;&lt;li data-start=&quot;3692&quot; data-end=&quot;3710&quot; class=&quot;&quot;&gt;&lt;p data-start=&quot;3694&quot; data-end=&quot;3710&quot; class=&quot;&quot;&gt;Confidence score&lt;/p&gt;&lt;/li&gt;&lt;li data-start=&quot;3713&quot; data-end=&quot;3723&quot; class=&quot;&quot;&gt;&lt;p data-start=&quot;3715&quot; data-end=&quot;3723&quot; class=&quot;&quot;&gt;Distance&lt;/p&gt;&lt;/li&gt;&lt;li data-start=&quot;3726&quot; data-end=&quot;3757&quot; class=&quot;&quot;&gt;&lt;p data-start=&quot;3728&quot; data-end=&quot;3757&quot; class=&quot;&quot;&gt;Trajectory or direction arrow&lt;span style=&quot;background-color: transparent;&quot;&gt;.&lt;/span&gt;&lt;/p&gt;&lt;/li&gt;&lt;/ul&gt;&lt;/li&gt;&lt;/ul&gt;" style="text;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="10" y="1830" width="560" height="330" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>
