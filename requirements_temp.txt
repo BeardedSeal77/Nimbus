@@ -1,0 +1,6 @@
+faster-whisper
+transformers
+opencv-python
+ultralytics
+requests
+numpy

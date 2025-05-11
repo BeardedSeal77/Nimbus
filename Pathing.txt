@@ -1,0 +1,27 @@
+Nimbus/
+├─ app/
+│  ├─ AI/
+│  │  ├─ depth_node.py
+│  │  ├─ intent_node.py
+│  │  ├─ object_detect_node.py
+│  │  ├─ object_node.py
+│  │  ├─ rtabmap_node.py
+│  │  ├─ stt_node.py
+│  │  └─ survey_node.py
+│  ├─ utils/
+│  │  └─ helpers.py
+│  ├─ __init__.py
+│  └─ main.py
+├─ public/
+│  ├─ flow/
+│  │  ├─ flowchart_2.drawio
+│  │  ├─ flowchart.drawio
+│  │  └─ flowchart.png
+│  └─ images/
+│     ├─ logo.jpeg
+│     └─ logo.png
+├─ .gitignore
+├─ docker-compose.yml
+├─ Dockerfile
+├─ README.md
+└─ requirements.txt

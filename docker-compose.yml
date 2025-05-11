@@ -1,0 +1,6 @@
+services:
+  nimbus:
+    image: nimbus
+    build:
+      context: .
+      dockerfile: ./Dockerfile

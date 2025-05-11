@@ -1,0 +1,4 @@
+after installing docker desktop.
+Right Click on `docker-compose.debug.yml` and say `compose up`
+
+then in therminal, say `docker run nimbus`
