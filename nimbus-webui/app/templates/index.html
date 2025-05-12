@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nimbus Random Number Generator</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>Nimbus Random Number Generator</h1>
+        <div class="random-number-container">
+            <h2>Your Random Number:</h2>
+            <div id="random-number-display">Click the button to generate a number</div>
+            <button id="generate-button">Generate Random Number</button>
+        </div>
+        <div id="error-message" class="error-message"></div>
+    </div>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>

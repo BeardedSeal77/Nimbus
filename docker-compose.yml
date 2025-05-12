@@ -2,5 +2,29 @@ services:
   nimbus:
     image: nimbus
     build:
-      context: .
-      dockerfile: ./Dockerfile
+      context: ./nimbus
+      dockerfile: ./Dockerfile.nimbus
+    container_name: nimbus
+    ports:
+      - 5002:5002
+    networks:
+      - web-network
+
+  nimbus-webui:
+    image: nimbus-webui
+    build:
+      context: ./nimbus-webui
+      dockerfile: ./Dockerfile.webui
+    container_name: nimbus-webui
+    ports:
+      - 5000:5000
+    environment:
+      - NIMBUS_HOST=nimbus
+      - NIMBUS_PORT=5002
+    networks:
+      - web-network
+    depends_on:
+      - nimbus
+
+networks:
+  web-network:

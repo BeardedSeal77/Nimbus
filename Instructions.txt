@@ -1,4 +1,16 @@
 after installing docker desktop.
+Webui
+Right Click on `docker-compose.yml` and say `compose up`
+127.0.0.1:5000
+
+
+
+
+
+
+Debugging
 Right Click on `docker-compose.debug.yml` and say `compose up`
 
-then in therminal, say `docker run nimbus`
+then press F5 to run debugger.
+
+I will add a watchdog for hot reloading

@@ -1,5 +1,8 @@
 Nimbus/
-├─ app/
+├─ .vscode/
+│  ├─ launch.json
+│  └─ tasks.json
+├─ nimbus/
 │  ├─ AI/
 │  │  ├─ depth_node.py
 │  │  ├─ intent_node.py
@@ -8,20 +11,40 @@ Nimbus/
 │  │  ├─ rtabmap_node.py
 │  │  ├─ stt_node.py
 │  │  └─ survey_node.py
+│  ├─ MR/
+│  │  └─ temp.txt
+│  ├─ Robotics/
+│  │  └─ temp.txt
 │  ├─ utils/
 │  │  └─ helpers.py
 │  ├─ __init__.py
-│  └─ main.py
+│  ├─ Dockerfile.nimbus
+│  ├─ main.py
+│  └─ requirements.txt
+├─ nimbus-webui/
+│  ├─ app/
+│  │  ├─ static/
+│  │  ├─ templates/
+│  │  │  └─ index.html
+│  │  └─ app.py
+│  ├─ Dockerfile.webui
+│  └─ requirements.txt
 ├─ public/
 │  ├─ flow/
+│  │  ├─ flowchart_2 (MR).drawio
+│  │  ├─ flowchart_2 (ROBOTICS).drawio
 │  │  ├─ flowchart_2.drawio
 │  │  ├─ flowchart.drawio
 │  │  └─ flowchart.png
 │  └─ images/
 │     ├─ logo.jpeg
 │     └─ logo.png
+├─ .dockerignore
 ├─ .gitignore
+├─ docker-compose.debug.yml
 ├─ docker-compose.yml
-├─ Dockerfile
+├─ Instructions.txt
+├─ Pathing.txt
 ├─ README.md
+├─ requirements_temp.txt
 └─ requirements.txt
