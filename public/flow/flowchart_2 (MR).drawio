@@ -1,6 +1,6 @@
 <mxfile host="65bd71144e">
     <diagram id="y12sq9UacOIsMTTaWXX6" name="Page-1">
-        <mxGraphModel dx="2544" dy="3540" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+        <mxGraphModel dx="3026" dy="3058" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
             <root>
                 <mxCell id="0"/>
                 <mxCell id="1" parent="0"/>
@@ -264,6 +264,45 @@
                 <mxCell id="165" value="Inputs" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" parent="157" vertex="1">
                     <mxGeometry x="90" width="60" height="30" as="geometry"/>
                 </mxCell>
+                <mxCell id="173" value="&lt;span style=&quot;color: rgb(0, 0, 0);&quot;&gt;/camera_pose, video&lt;/span&gt;" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="157">
+                    <mxGeometry x="40" y="80" width="160" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="175" value="&lt;span style=&quot;color: rgb(0, 0, 0);&quot;&gt;/message&lt;/span&gt;" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="157">
+                    <mxGeometry x="40" y="150" width="160" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="177" value="/intent" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="157">
+                    <mxGeometry x="40" y="220" width="160" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="178" value="&lt;span style=&quot;color: rgb(0, 0, 0);&quot;&gt;MR headset video out&lt;/span&gt;" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="157">
+                    <mxGeometry x="760" y="80" width="160" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="179" value="MR headset message out" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="157">
+                    <mxGeometry x="760" y="150" width="160" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="180" value="MR headset intent" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="157">
+                    <mxGeometry x="760" y="220" width="160" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="181" value="Video, point cloud, object coords" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="157">
+                    <mxGeometry x="40" y="50" width="140" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="182" value="Drone vid + mesh overly + object bounding boxes" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="157">
+                    <mxGeometry x="770" y="50" width="140" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="183" value="display confirm or error message" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="157">
+                    <mxGeometry x="770" y="120" width="140" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="184" value="confirmation or error message" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="157">
+                    <mxGeometry x="50" y="120" width="140" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="187" value="input is drone commands or location coordinates" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="157">
+                    <mxGeometry x="50" y="190" width="140" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="188" value="shows arrow with intended flight path" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="157">
+                    <mxGeometry x="770" y="190" width="140" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="189" value="output is ros publisher publishing yaw commands" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="157">
+                    <mxGeometry x="770" y="260" width="150" height="30" as="geometry"/>
+                </mxCell>
                 <mxCell id="159" value="Robotics" style="swimlane;whiteSpace=wrap;html=1;" parent="1" vertex="1">
                     <mxGeometry x="-1080" y="-1100" width="960" height="900" as="geometry"/>
                 </mxCell>
@@ -296,6 +335,12 @@
                         <mxPoint x="480" y="-770" as="sourcePoint"/>
                         <mxPoint x="530" y="-820" as="targetPoint"/>
                     </mxGeometry>
+                </mxCell>
+                <mxCell id="185" value="Head movement (yaw)" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+                    <mxGeometry x="50" y="-290" width="160" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="186" value="/change_yaw" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+                    <mxGeometry x="770" y="-290" width="160" height="30" as="geometry"/>
                 </mxCell>
             </root>
         </mxGraphModel>
