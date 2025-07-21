@@ -2,5 +2,5 @@
 # inputs: transcript
 # output: intent
 
-def intent_node():
+def intent_object_node():
     print("microwave noises")
