@@ -23,5 +23,7 @@
 **/obj
 **/secrets.dev.yaml
 **/values.dev.yaml
+# YOLO model weights
+*.pt
 LICENSE
 README.md
