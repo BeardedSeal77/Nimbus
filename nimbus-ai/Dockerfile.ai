@@ -1,0 +1,28 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    curl \
+    ffmpeg \
+    libsm6 \
+    libxext6 \
+    libfontconfig1 \
+    libxrender1 \
+    libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements and install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy AI application code
+COPY . .
+
+# No exposed ports - internal container only
+
+# Run the AI system (for ROS2 integration)
+CMD ["python", "-c", "from AI import get_ai_system; ai = get_ai_system(); print('AI system ready'); import time; time.sleep(infinity)"]

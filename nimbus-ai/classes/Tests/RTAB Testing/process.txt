@@ -1,0 +1,55 @@
+  1. rtabmap_node.py - Main SLAM Module
+
+  - RTABMapNode Class: Full-featured SLAM interface
+  - Modular Design: Connects local Python to containerized ROS2+RTAB-Map
+  - Threading Support: Continuous SLAM processing in background
+  - AI.py Integration: Simple rtabmap_node() function for your AI coordinator
+
+  2. phone_camera.py - Phone Webcam Interface
+
+  - Multiple Connection Methods: IP camera apps, USB, auto-detection
+  - Streaming Support: Continuous frame capture
+  - Popular Apps: DroidCam (port 4747), IP Webcam (port 8080)
+  - Thread-Safe: Concurrent frame access
+
+  3. test_rtabmap_phone.py - Interactive Testing
+
+  - Connection Testing: Test phone camera connectivity
+  - SLAM Testing: Verify RTAB-Map integration
+  - Live Demo: Real-time SLAM visualization
+  - Multiple Test Modes: From basic to interactive
+
+How It Works:
+
+  Phone Setup:
+
+  1. Install DroidCam or IP Webcam on your phone
+  2. Connect phone and PC to same WiFi network
+  3. Start camera app (note the IP address shown)
+
+  Usage in AI.py:
+
+  # In your AI.py coordinator
+  from classes.rtabmap_node import rtabmap_node
+  from classes.phone_camera import create_phone_camera
+
+  # Set up camera
+  camera = create_phone_camera("http://192.168.1.100:4747/video")
+  camera.start_streaming()
+
+  # Process frames through SLAM
+  frame = camera.get_latest_frame()
+  if frame is not None:
+      pose = rtabmap_node(frame)  # This calls your containerized RTAB-Map
+      print(f"Camera pose: {pose}")
+
+  Architecture Flow:
+
+  Phone Camera App → WiFi → Local Python → ROS2 Bridge → ros2-central container → RTAB-Map → Pose Data
+                                ↓
+                            AI.py (coordinates everything)
+
+  Testing:
+
+  cd nimbus-ai/classes/Tests
+  python test_rtabmap_phone.py

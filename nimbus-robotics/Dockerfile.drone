@@ -1,0 +1,25 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies for robotics/drone control
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    curl \
+    udev \
+    libusb-1.0-0-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements and install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy Drone/Robotics application code
+COPY . .
+
+# Expose port for drone services
+EXPOSE 5004
+
+# Run the Drone/Robotics application
+CMD ["python", "drone_main.py"]

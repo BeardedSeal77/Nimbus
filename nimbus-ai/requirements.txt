@@ -1,0 +1,18 @@
+flask==3.0.1
+gunicorn==21.2.0
+requests==2.31.0
+numpy==1.24.3
+opencv-python==4.8.1.78
+
+# AI/ML Dependencies
+torch==2.0.1
+torchvision==0.15.2
+ultralytics==8.0.120
+transformers==4.30.2
+faster-whisper==0.7.1
+
+# ROS2 Integration
+rclpy==3.3.7
+
+# Logging and utilities
+logging==0.4.9.6

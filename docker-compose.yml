@@ -1,15 +1,79 @@
 services:
-  nimbus:
-    image: nimbus
+  # AI Processing Container (Internal Only)
+  nimbus-ai:
+    image: nimbus-ai
     build:
-      context: ./nimbus
-      dockerfile: ./Dockerfile.nimbus
-    container_name: nimbus
-    ports:
-      - 5002:5002
+      context: ./nimbus-ai
+      dockerfile: ./Dockerfile.ai
+    container_name: nimbus-ai
+    environment:
+      - OLLAMA_HOST=ollama
+      - OLLAMA_PORT=11434
+      - ROS2_HOST=ros2-central
     networks:
-      - web-network
+      - nimbus-network
+    depends_on:
+      - ollama
+      - ros2-central
 
+  # Mixed Reality Container
+  nimbus-mr:
+    image: nimbus-mr
+    build:
+      context: ./nimbus-mr
+      dockerfile: ./Dockerfile.mr
+    container_name: nimbus-mr
+    ports:
+      - 5003:5003
+    environment:
+      - ROS2_HOST=ros2-central
+    networks:
+      - nimbus-network
+    depends_on:
+      - ros2-central
+
+  # Drone/Robotics Container
+  nimbus-drone:
+    image: nimbus-drone
+    build:
+      context: ./nimbus-robotics
+      dockerfile: ./Dockerfile.drone
+    container_name: nimbus-drone
+    ports:
+      - 5004:5004
+    environment:
+      - ROS2_HOST=ros2-central
+    networks:
+      - nimbus-network
+    depends_on:
+      - ros2-central
+    privileged: true
+    devices:
+      - /dev:/dev
+
+  # Central ROS2 + RTAB-Map Container
+  ros2-central:
+    image: introlab3it/rtabmap_ros:humble
+    container_name: ros2-central
+    ports:
+      - 11311:11311  # ROS Master
+      - 9090:9090    # ROS Bridge
+    environment:
+      - ROS_DOMAIN_ID=0
+      - DISPLAY=${DISPLAY}
+    networks:
+      - nimbus-network
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - ./ros2-config:/ros2_ws/src/nimbus_config
+    privileged: true
+    devices:
+      - /dev:/dev
+    command: ["bash", "-c", "source /opt/ros/humble/setup.bash && tail -f /dev/null"]
+    stdin_open: true
+    tty: true
+
+  # Web UI Container
   nimbus-webui:
     image: nimbus-webui
     build:
@@ -19,12 +83,43 @@ services:
     ports:
       - 5000:5000
     environment:
-      - NIMBUS_HOST=nimbus
-      - NIMBUS_PORT=5002
+      - NIMBUS_AI_HOST=nimbus-ai
+      - NIMBUS_AI_PORT=5002
+      - NIMBUS_MR_HOST=nimbus-mr
+      - NIMBUS_MR_PORT=5003
+      - NIMBUS_DRONE_HOST=nimbus-drone
+      - NIMBUS_DRONE_PORT=5004
+      - ROS2_HOST=ros2-central
     networks:
-      - web-network
+      - nimbus-network
     depends_on:
-      - nimbus
+      - nimbus-ai
+      - nimbus-mr
+      - nimbus-drone
+      - ros2-central
+
+  # Ollama LLM Container
+  ollama:
+    image: ollama/ollama:latest
+    container_name: nimbus-ollama
+    ports:
+      - 11434:11434
+    volumes:
+      - ollama:/root/.ollama
+    networks:
+      - nimbus-network
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
 
 networks:
-  web-network:
+  nimbus-network:
+    driver: bridge
+
+volumes:
+  ollama:
+    external: true

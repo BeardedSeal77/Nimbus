@@ -1,0 +1,52 @@
+# Development Docker Compose
+# Only external dependencies: Ollama + ROS2
+# Run local Python from nimbus-ai/ directory
+
+services:
+  # Central ROS2 + RTAB-Map Container
+  ros2-central:
+    image: introlab3it/rtabmap_ros:humble
+    container_name: ros2-central
+    ports:
+      - 11311:11311  # ROS Master
+      - 9090:9090    # ROS Bridge
+    environment:
+      - ROS_DOMAIN_ID=0
+      - DISPLAY=${DISPLAY}
+    networks:
+      - nimbus-network
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - ./ros2-config:/ros2_ws/src/nimbus_config
+    privileged: true
+    devices:
+      - /dev:/dev
+    command: ["bash", "-c", "source /opt/ros/humble/setup.bash && tail -f /dev/null"]
+    stdin_open: true
+    tty: true
+
+  # Ollama LLM Container
+  ollama:
+    image: ollama/ollama:latest
+    container_name: nimbus-ollama
+    ports:
+      - 11434:11434
+    volumes:
+      - ollama:/root/.ollama
+    networks:
+      - nimbus-network
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+networks:
+  nimbus-network:
+    driver: bridge
+
+volumes:
+  ollama:
+    external: true
