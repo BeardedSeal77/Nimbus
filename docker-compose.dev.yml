@@ -9,9 +9,9 @@ services:
     container_name: ros2-central
     ports:
       - 11311:11311  # ROS Master
-      - 9090:9090    # ROS Bridge
+      - 9090:9090    # ROS Bridge WebSocket
     environment:
-      - ROS_DOMAIN_ID=0
+      - ROS_DOMAIN_ID=0  
       - DISPLAY=${DISPLAY}
     networks:
       - nimbus-network
@@ -21,7 +21,7 @@ services:
     privileged: true
     devices:
       - /dev:/dev
-    command: ["bash", "-c", "source /opt/ros/humble/setup.bash && tail -f /dev/null"]
+    command: ["bash", "-c", "source /opt/ros/humble/setup.bash && apt update && apt install -y ros-humble-rosbridge-suite && ros2 run rosbridge_server rosbridge_websocket --ros-args -p port:=9090 & tail -f /dev/null"]
     stdin_open: true
     tty: true
 

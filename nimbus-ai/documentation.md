@@ -182,33 +182,169 @@ numpy
 torch
 torchvision
 ollama-python
+websocket-client  # For ROS2 bridge communication
+cv2  # OpenCV for camera handling
+```
+
+### ROS2 Container Setup
+The system uses `introlab3it/rtabmap_ros:humble` container with the following configuration:
+
+#### Required ROS2 Packages:
+- **RTAB-Map**: Already included in base image
+- **ROS Bridge Suite**: `ros-humble-rosbridge-suite` (auto-installed on startup)
+
+#### Container Ports:
+- **11311**: ROS Master
+- **9090**: ROS Bridge WebSocket (for Python ↔ ROS2 communication)
+
+#### Startup Command:
+```bash
+source /opt/ros/humble/setup.bash && 
+apt update && 
+apt install -y ros-humble-rosbridge-suite && 
+ros2 run rosbridge_server rosbridge_websocket --ros-args -p port:=9090 & 
+tail -f /dev/null
 ```
 
 ### Docker Integration
-The AI container runs independently and communicates with the ROS2 container through:
-- **HTTP APIs** (current Flask implementation)
-- **ROS2 Services/Actions** (recommended for production)
-- **Message Queues** (Redis/RabbitMQ for high-throughput scenarios)
+The AI container communicates with ROS2 container through:
+- **WebSocket ROS Bridge** (port 9090) - Primary method for video pipeline
+- **HTTP APIs** (Flask implementation for other services)
+- **ROS2 Topics**:
+  - `/camera/image_raw` - Camera feed from publisher to AI
+  - `/nimbus/ai/slam_pose` - SLAM results from AI
+  - `/nimbus/ai/object_detection` - Object detection results
+  - `/nimbus/ai/processing_status` - AI processing status
+
+## Video Pipeline Architecture
+
+### Camera Feed Integration
+The system supports camera input through a modular pipeline:
+
+#### Camera Publisher (`scripts/simple_camera_publisher.py`)
+- Captures video from Camo Studio (or other cameras)
+- Publishes to ROS2 topic `/camera/image_raw`
+- Uses WebSocket connection to ROS2 bridge
+
+#### AI Subscriber (`simple_ai_subscriber.py`) 
+- Subscribes to camera feed from ROS2
+- Processes frames through AI.py
+- Displays results with overlays
+
+#### File Structure:
+```
+nimbus-ai/
+├── AI.py                           # Central AI coordinator
+├── helpers/
+│   ├── phone_camera.py            # Camera interface
+│   └── display.py                 # Display overlays
+├── classes/                       # AI processing nodes
+└── scripts/                       # Application entry points
+    ├── simple_camera_publisher.py # Camera → ROS2
+    ├── simple_ai_subscriber.py   # ROS2 → AI → Display
+    └── run_video_system.py       # Coordinated startup
+```
+
+### Camera Setup Requirements:
+1. **Camo Studio** or compatible camera app
+2. **Camera must be free** (not used by other applications)
+3. **WebSocket client**: `pip install websocket-client`
+
+### Running the Video System:
+```bash
+# Start ROS2 container
+docker-compose up -d ros2-central
+
+# Install Python dependencies
+pip install websocket-client opencv-python
+
+# Run complete video pipeline
+cd nimbus-ai
+python run_video_system.py
+```
+
+## Quick Start Installation Guide
+
+### 1. Docker Setup
+```bash
+# Production (all containers)
+docker-compose up -d
+
+# Development (only ROS2 + Ollama)  
+docker-compose -f docker-compose.dev.yml up -d
+```
+
+### 2. ROS2 Container Verification
+```bash
+# Check if rosbridge is running
+curl http://localhost:9090
+# Should return: Can "Upgrade" only to "WebSocket".
+
+# Check ROS2 topics
+docker exec ros2-central bash -c "source /opt/ros/humble/setup.bash && ros2 topic list"
+```
+
+### 3. Python Environment Setup
+```bash
+# Required packages for video pipeline
+pip install websocket-client opencv-python numpy
+
+# Optional: AI processing dependencies  
+pip install transformers torch ultralytics faster-whisper
+```
+
+### 4. Camera Setup
+1. Install Camo Studio app on phone
+2. Connect phone to same network as PC
+3. **Close Camo Studio app completely** before running pipeline
+4. Run camera diagnostic: `python camera_diagnostic.py`
+
+### 5. Run Video System
+```bash
+cd nimbus-ai
+python run_video_system.py
+```
+
+### Troubleshooting
+- **Camera Error -1072875772**: Camo Studio app is still running - close it completely
+- **WebSocket Connection Failed**: ROS2 container not running or rosbridge not started
+- **No Video Display**: Check if both publisher and subscriber processes are running
 
 ## Current Implementation Status
 
 ### ✅ Completed
 - Basic Flask web server structure
-- Docker containerization setup
-- Modular file organization
-- Inter-service communication framework
+- Docker containerization setup with ROS2 integration
+- Modular file organization with proper directory structure
+- **ROS2 Bridge WebSocket communication** 
+- **Camera feed pipeline** (Camo Studio → ROS2 → AI)
+- **Video display system** with processing overlays
+- **Phone camera helper** with multiple connection methods
+- **RTAB-Map node architecture** (modular design ready)
+- **Intent object extraction** with Ollama integration (limited to 5 intents)
+- **Coordinated startup scripts** for complete system
 
-### 🚧 In Progress
-- Individual node implementations (currently placeholder functions)
-- AI model integration
-- ROS2 service wrappers
+### 🚧 In Progress  
+- Individual node implementations (AI processing logic)
+- Full AI model integration (requires dependencies)
+- ROS2 service wrappers for production deployment
 
 ### 📋 TODO
+- Install AI dependencies (transformers, whisper, ultralytics)
 - Implement actual AI processing in each node
-- Add error handling and logging
-- Performance optimization
+- Add comprehensive error handling and logging
+- Performance optimization for video processing
 - ROS2 message type definitions
 - Integration testing with drone hardware
+- Production deployment configuration
+
+### 🎥 Video Pipeline Status
+- ✅ **Camera Publisher**: Captures and publishes to ROS2
+- ✅ **AI Subscriber**: Receives from ROS2 and displays
+- ✅ **ROS2 Bridge**: WebSocket communication working
+- ✅ **Display System**: Overlays and processing status
+- ⚠️ **Camera Access**: Requires Camo Studio app to be closed
+- 📋 **AI Processing**: Awaiting model dependencies
 
 ## Development Recommendations
 

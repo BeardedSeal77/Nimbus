@@ -1,400 +1,359 @@
-# nimbus/AI/AI.py
-# Nimbus AI Main Aggregator
-# Central coordinator for all AI processes in the drone control system.
-# Manages state, data flow, and orchestrates all AI nodes.
+#!/usr/bin/env python3
+"""
+AI.py - Nimbus AI Main System
+Subscribes to ROS2 video feed, processes frames, and displays results
+Pipeline: Camo -> ROS2 -> This Script -> Processing -> Display
+"""
 
-import json
-import logging
-import threading
+import cv2
 import time
-from typing import Dict, List, Optional, Tuple, Any
-from dataclasses import dataclass, asdict
-from datetime import datetime
+import base64
+import json
+import websocket
+import threading
+import logging
 import numpy as np
+import sys
+import os
+from typing import Optional, Dict, Any
+from datetime import datetime
 
-# Import AI processing nodes
-from classes.stt_node import stt_node
-from classes.intent_object_node import intent_object_node
-from classes.object_detect_node import object_detect_node
-from classes.depth_node import depth_node
-from classes.rtabmap_node import rtabmap_node
-from classes.survey_node import survey_node
+# Add project paths
+project_root = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(project_root)
+
+# Import nimbus-ai helpers and scripts
+from helpers.display import ProcessedDisplay
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-@dataclass
-class DroneState:
-    # Data class to hold all drone state information
-    # Audio/Text Processing
-    transcript: str = ""
-    intent: str = ""
-    target_object: str = ""
+class NimbusAISystem:
+    """
+    Main Nimbus AI System
+    Subscribes to ROS2 video feed and displays processed frames
+    """
     
-    # Visual Processing
-    current_frame: Optional[np.ndarray] = None
-    bounding_box: Optional[Dict[str, float]] = None
-    detected_objects: List[Dict] = None
-    
-    # Spatial Information
-    camera_pose: Optional[Dict[str, float]] = None  # Current camera position/orientation
-    drone_position: Optional[Dict[str, float]] = None  # Current drone position
-    object_pose: Optional[Dict[str, float]] = None  # Target object 3D position
-    origin_position: Dict[str, float] = None  # Where drone started (home)
-    
-    # Environmental Data
-    depth_data: Optional[np.ndarray] = None
-    scene_objects: List[Dict] = None  # All objects in environment from survey
-    
-    # System Status
-    last_updated: datetime = None
-    processing_status: str = "idle"  # idle, processing, error, complete
-    error_message: str = ""
-    
-    def __post_init__(self):
-        if self.detected_objects is None:
-            self.detected_objects = []
-        if self.scene_objects is None:
-            self.scene_objects = []
-        if self.last_updated is None:
-            self.last_updated = datetime.now()
-
-class NimbusAI:
-    # Main AI aggregator class for the Nimbus drone system.
-    # Coordinates all AI processing nodes and maintains system state.
-    
-    def __init__(self):
-        self.state = DroneState()
+    def __init__(self, ros2_host: str = "localhost", ros2_port: int = 9090):
+        self.ros2_host = ros2_host
+        self.ros2_port = ros2_port
+        self.ws_url = f"ws://{ros2_host}:{ros2_port}"
+        
+        # WebSocket connection
+        self.ws = None
+        self.ws_connected = False
+        
+        # Display system
+        self.display = ProcessedDisplay()
+        
+        # Processing stats
+        self.frames_received = 0
+        self.frames_displayed = 0
+        self.start_time = None
+        
+        # Current frame data
+        self.current_frame = None
+        self.current_ai_result = {}
+        
+        # Threading
+        self.ws_thread = None
         self.is_running = False
-        self._lock = threading.Lock()
+        self.display_thread = None
         
-        # Processing flags
-        self.continuous_slam = False
-        self.auto_survey = False
+        # AI processing placeholder (we'll add real processing later)
+        self.ai_processing_enabled = False
         
-        # Performance monitoring
-        self.processing_times = {}
-        self.node_status = {
-            'stt': 'ready',
-            'intent_object': 'ready',
-            'object_detect': 'ready',
-            'depth': 'ready',
-            'rtabmap': 'ready',
-            'survey': 'ready'
-        }
-        
-        logger.info("Nimbus AI system initialized")
-    
-    def set_origin(self, position: Dict[str, float]):
-        # Set the drone's origin/home position
-        with self._lock:
-            self.state.origin_position = position.copy()
-            logger.info(f"Origin set to: {position}")
-    
-    def get_state(self) -> Dict:
-        # Get current system state as dictionary
-        with self._lock:
-            return asdict(self.state)
-    
-    def update_status(self, status: str, error_msg: str = ""):
-        # Update processing status
-        with self._lock:
-            self.state.processing_status = status
-            self.state.error_message = error_msg
-            self.state.last_updated = datetime.now()
-    
-    # Audio Processing Pipeline
-    def process_audio(self, audio_data: np.ndarray) -> Dict[str, str]:
-        # Process audio input through STT and intent/object extraction
-        # Returns: {'intent': str, 'object': str, 'transcript': str}
+    def connect_to_ros2(self) -> bool:
+        """Connect to ROS2 via rosbridge websocket"""
         try:
-            self.update_status("processing")
-            start_time = time.time()
+            logger.info(f"🔗 Connecting to ROS2 at {self.ws_url}")
             
-            # Step 1: Speech to Text
-            logger.info("Processing audio through STT...")
-            self.node_status['stt'] = 'processing'
-            transcript = stt_node(audio_data)
-            self.node_status['stt'] = 'complete'
+            self.ws = websocket.WebSocketApp(
+                self.ws_url,
+                on_open=self._on_ws_open,
+                on_message=self._on_ws_message,
+                on_error=self._on_ws_error,
+                on_close=self._on_ws_close
+            )
             
-            with self._lock:
-                self.state.transcript = transcript
+            # Start WebSocket in separate thread
+            self.ws_thread = threading.Thread(target=self.ws.run_forever, daemon=True)
+            self.ws_thread.start()
             
-            logger.info(f"Transcript: {transcript}")
+            # Wait for connection
+            timeout = 10
+            while not self.ws_connected and timeout > 0:
+                time.sleep(0.1)
+                timeout -= 0.1
             
-            # Step 2: Extract Intent and Object
-            logger.info("Extracting intent and object...")
-            self.node_status['intent_object'] = 'processing'
-            intent_object_result = intent_object_node(transcript)
-            self.node_status['intent_object'] = 'complete'
+            if self.ws_connected:
+                logger.info("✅ Connected to ROS2 rosbridge")
+                self._setup_subscriptions()
+                return True
+            else:
+                logger.error("❌ Failed to connect to ROS2 rosbridge")
+                return False
+                
+        except Exception as e:
+            logger.error(f"❌ Error connecting to ROS2: {e}")
+            return False
+    
+    def _on_ws_open(self, ws):
+        """WebSocket connection opened"""
+        self.ws_connected = True
+        logger.info("🔗 WebSocket connection established")
+    
+    def _on_ws_message(self, ws, message):
+        """Handle WebSocket messages from ROS2"""
+        try:
+            msg = json.loads(message)
             
-            with self._lock:
-                self.state.intent = intent_object_result.get('intent', '')
-                self.state.target_object = intent_object_result.get('object', '')
+            # Handle camera image messages
+            if msg.get('topic') == '/camera/image_raw':
+                self._handle_camera_frame(msg)
             
-            # Record processing time
-            self.processing_times['audio_pipeline'] = time.time() - start_time
+        except json.JSONDecodeError:
+            logger.debug(f"Invalid JSON message")
+        except Exception as e:
+            logger.error(f"Error handling ROS2 message: {e}")
+    
+    def _on_ws_error(self, ws, error):
+        """WebSocket error"""
+        logger.error(f"❌ WebSocket error: {error}")
+        self.ws_connected = False
+    
+    def _on_ws_close(self, ws, close_status_code, close_msg):
+        """WebSocket connection closed"""
+        logger.info("🔌 WebSocket connection closed")
+        self.ws_connected = False
+    
+    def _setup_subscriptions(self):
+        """Subscribe to ROS2 camera topic"""
+        subscribe_msg = {
+            "op": "subscribe",
+            "topic": "/camera/image_raw",
+            "type": "sensor_msgs/Image"
+        }
+        self._send_ros_message(subscribe_msg)
+        logger.info("📡 Subscribed to /camera/image_raw")
+    
+    def _send_ros_message(self, message: dict):
+        """Send message to ROS2 via websocket"""
+        if self.ws_connected and self.ws:
+            try:
+                self.ws.send(json.dumps(message))
+            except Exception as e:
+                logger.error(f"❌ Error sending ROS message: {e}")
+    
+    def _handle_camera_frame(self, ros_msg):
+        """Handle incoming camera frame from ROS2"""
+        try:
+            self.frames_received += 1
             
-            result = {
-                'intent': self.state.intent,
-                'object': self.state.target_object,
-                'transcript': self.state.transcript
-            }
+            if not self.start_time:
+                self.start_time = time.time()
             
-            logger.info(f"Audio processing complete: {result}")
-            self.update_status("complete")
+            # Extract and decode frame
+            msg_data = ros_msg.get('msg', {})
+            frame = self._decode_ros_image(msg_data)
             
-            return result
+            if frame is not None:
+                # Process frame (placeholder for now)
+                ai_result = self._process_frame(frame)
+                
+                # Update current frame data for display thread
+                self.current_frame = frame.copy()
+                self.current_ai_result = ai_result
+                
+                # Log stats periodically
+                if self.frames_received % 30 == 0:
+                    elapsed = time.time() - self.start_time
+                    fps = self.frames_received / elapsed if elapsed > 0 else 0
+                    logger.info(f"📊 Received {self.frames_received} frames @ {fps:.1f} FPS")
             
         except Exception as e:
-            error_msg = f"Audio processing failed: {str(e)}"
-            logger.error(error_msg)
-            self.update_status("error", error_msg)
-            self.node_status['stt'] = 'error'
-            self.node_status['intent_object'] = 'error'
-            raise
+            logger.error(f"❌ Error handling camera frame: {e}")
     
-    # Visual Processing Pipeline
-    def process_frame(self, frame: np.ndarray, depth_data: Optional[np.ndarray] = None) -> Dict:
-        # Process camera frame for object detection and pose estimation
-        # Returns: {'bounding_box': dict, 'object_pose': dict, 'camera_pose': dict}
+    def _decode_ros_image(self, image_msg: dict) -> Optional[np.ndarray]:
+        """Decode ROS Image message to OpenCV frame"""
         try:
-            self.update_status("processing")
-            start_time = time.time()
+            # Get image properties
+            width = image_msg.get('width', 0)
+            height = image_msg.get('height', 0)
+            encoding = image_msg.get('encoding', '')
+            data = image_msg.get('data', '')
             
-            with self._lock:
-                self.state.current_frame = frame.copy()
-                if depth_data is not None:
-                    self.state.depth_data = depth_data.copy()
+            if not data:
+                return None
             
-            # Step 1: SLAM for camera pose (runs continuously)
-            if self.continuous_slam:
-                logger.debug("Updating camera pose via SLAM...")
-                self.node_status['rtabmap'] = 'processing'
-                camera_pose = rtabmap_node(frame, depth_data)
-                self.node_status['rtabmap'] = 'complete'
+            # Decode base64 data
+            image_data = base64.b64decode(data)
+            
+            if encoding == 'jpeg':
+                # Decode JPEG
+                nparr = np.frombuffer(image_data, np.uint8)
+                frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                return frame
+            else:
+                logger.debug(f"Unsupported encoding: {encoding}")
+                return None
                 
-                with self._lock:
-                    self.state.camera_pose = camera_pose
-                    self.state.drone_position = camera_pose  # Assuming camera is on drone
-            
-            # Step 2: Object Detection (if we have a target)
-            bounding_box = None
-            object_pose = None
-            
-            if self.state.intent and self.state.target_object:
-                logger.info(f"Detecting object: {self.state.target_object}")
-                self.node_status['object_detect'] = 'processing'
-                bounding_box = object_detect_node(
-                    self.state.intent, 
-                    self.state.target_object, 
-                    frame
-                )
-                self.node_status['object_detect'] = 'complete'
-                
-                with self._lock:
-                    self.state.bounding_box = bounding_box
-                
-                # Step 3: Depth estimation for 3D position
-                if bounding_box and self.state.camera_pose:
-                    logger.info("Calculating object 3D position...")
-                    self.node_status['depth'] = 'processing'
-                    object_pose = depth_node(
-                        self.state.intent,
-                        bounding_box,
-                        frame,
-                        self.state.camera_pose
-                    )
-                    self.node_status['depth'] = 'complete'
-                    
-                    with self._lock:
-                        self.state.object_pose = object_pose
-            
-            # Record processing time
-            self.processing_times['visual_pipeline'] = time.time() - start_time
-            
-            result = {
-                'bounding_box': bounding_box,
-                'object_pose': object_pose,
-                'camera_pose': self.state.camera_pose
-            }
-            
-            logger.debug(f"Frame processing complete")
-            self.update_status("complete")
-            
-            return result
-            
         except Exception as e:
-            error_msg = f"Frame processing failed: {str(e)}"
-            logger.error(error_msg)
-            self.update_status("error", error_msg)
-            for node in ['rtabmap', 'object_detect', 'depth']:
-                if self.node_status[node] == 'processing':
-                    self.node_status[node] = 'error'
-            raise
-    
-    # Survey Operations
-    def run_survey(self, frame: np.ndarray, depth_data: np.ndarray) -> List[Dict]:
-        # Run comprehensive environment survey
-        # Returns: List of all detected objects with poses
-        try:
-            self.update_status("processing")
-            start_time = time.time()
-            
-            logger.info("Starting environment survey...")
-            self.node_status['survey'] = 'processing'
-            
-            scene_objects = survey_node(frame, depth_data, self.state.camera_pose)
-            
-            with self._lock:
-                self.state.scene_objects = scene_objects
-            
-            self.node_status['survey'] = 'complete'
-            self.processing_times['survey'] = time.time() - start_time
-            
-            logger.info(f"Survey complete: found {len(scene_objects)} objects")
-            self.update_status("complete")
-            
-            return scene_objects
-            
-        except Exception as e:
-            error_msg = f"Survey failed: {str(e)}"
-            logger.error(error_msg)
-            self.update_status("error", error_msg)
-            self.node_status['survey'] = 'error'
-            raise
-    
-    # Main Processing Methods
-    def process_voice_command(self, audio_data: np.ndarray) -> Dict:
-        # Complete voice command processing pipeline
-        # Returns: Command processing result with navigation data
-        logger.info("Processing voice command...")
-        
-        # Process audio to get intent and object
-        audio_result = self.process_audio(audio_data)
-        
-        # Handle different intents
-        intent = audio_result['intent'].lower()
-        
-        if intent == 'home':
-            return self._handle_home_command()
-        elif intent == 'cancel':
-            return self._handle_cancel_command()
-        elif intent == 'go':
-            return self._handle_go_command(audio_result['object'])
-        else:
-            return {'status': 'error', 'message': f'Unknown intent: {intent}'}
-    
-    def _handle_home_command(self) -> Dict:
-        # Handle 'home' intent
-        if not self.state.origin_position:
-            return {'status': 'error', 'message': 'Origin position not set'}
-        
-        return {
-            'status': 'success',
-            'action': 'navigate_to',
-            'target_pose': self.state.origin_position,
-            'message': 'Returning to origin'
-        }
-    
-    def _handle_cancel_command(self) -> Dict:
-        # Handle 'cancel' intent
-        with self._lock:
-            self.state.intent = ""
-            self.state.target_object = ""
-            self.state.bounding_box = None
-            self.state.object_pose = None
-        
-        return {
-            'status': 'success',
-            'action': 'cancel',
-            'message': 'Command cancelled'
-        }
-    
-    def _handle_go_command(self, target_object: str) -> Dict:
-        # Handle 'go' intent with target object
-        if not target_object:
-            return {'status': 'error', 'message': 'No target object specified'}
-        
-        # Object detection and pose estimation will happen in process_frame()
-        # This just sets up the target
-        return {
-            'status': 'success',
-            'action': 'search_and_navigate',
-            'target_object': target_object,
-            'message': f'Searching for {target_object}'
-        }
-    
-    # Continuous Processing
-    def start_continuous_slam(self):
-        # Enable continuous SLAM processing
-        self.continuous_slam = True
-        logger.info("Continuous SLAM enabled")
-    
-    def stop_continuous_slam(self):
-        # Disable continuous SLAM processing
-        self.continuous_slam = False
-        logger.info("Continuous SLAM disabled")
-    
-    def enable_auto_survey(self):
-        # Enable automatic environment surveying
-        self.auto_survey = True
-        logger.info("Auto survey enabled")
-    
-    def disable_auto_survey(self):
-        # Disable automatic environment surveying
-        self.auto_survey = False
-        logger.info("Auto survey disabled")
-    
-    # Utility Methods
-    def get_performance_metrics(self) -> Dict:
-        # Get system performance metrics
-        return {
-            'processing_times': self.processing_times,
-            'node_status': self.node_status,
-            'system_status': self.state.processing_status,
-            'last_updated': self.state.last_updated.isoformat() if self.state.last_updated else None
-        }
-    
-    def reset_state(self):
-        # Reset all state data except origin
-        origin = self.state.origin_position
-        with self._lock:
-            self.state = DroneState()
-            self.state.origin_position = origin
-        logger.info("AI state reset")
-    
-    def get_navigation_data(self) -> Optional[Dict]:
-        # Get current navigation target data
-        if not self.state.object_pose:
+            logger.error(f"❌ Error decoding ROS image: {e}")
             return None
-        
-        return {
-            'target_pose': self.state.object_pose,
-            'current_pose': self.state.drone_position,
-            'origin_pose': self.state.origin_position,
-            'target_object': self.state.target_object,
-            'intent': self.state.intent
-        }
     
-    def health_check(self) -> Dict:
-        # System health check
-        healthy_nodes = sum(1 for status in self.node_status.values() 
-                          if status in ['ready', 'complete'])
-        total_nodes = len(self.node_status)
-        
-        return {
-            'status': 'healthy' if self.state.processing_status != 'error' else 'error',
-            'nodes_healthy': f"{healthy_nodes}/{total_nodes}",
-            'node_status': self.node_status,
-            'error_message': self.state.error_message,
-            'uptime': time.time()  # Could track actual uptime
+    def _process_frame(self, frame: np.ndarray) -> Dict[str, Any]:
+        """
+        Process frame through AI pipeline
+        Currently a placeholder - will add real AI processing later
+        """
+        # Placeholder AI processing result
+        ai_result = {
+            'camera_pose': None,
+            'bounding_box': None,
+            'object_pose': None,
+            'processing_status': 'pass_through',
+            'frame_shape': frame.shape,
+            'timestamp': datetime.now()
         }
+        
+        # TODO: Add real AI processing here
+        # This is where we'll integrate:
+        # - SLAM processing
+        # - Object detection
+        # - Depth estimation
+        # - Intent processing
+        
+        return ai_result
+    
+    def _display_loop(self):
+        """Main display loop - runs in separate thread"""
+        logger.info("🖥️  Starting display loop...")
+        
+        while self.is_running:
+            try:
+                if self.current_frame is not None:
+                    # Create display frame with overlays
+                    elapsed = time.time() - self.start_time if self.start_time else 0
+                    display_frame = self.display.create_display_frame(
+                        self.current_frame, 
+                        self.current_ai_result, 
+                        self.frames_displayed, 
+                        elapsed
+                    )
+                    
+                    # Show frame
+                    cv2.imshow('Nimbus AI - Live Video Feed', display_frame)
+                    
+                    self.frames_displayed += 1
+                    
+                    # Handle key presses
+                    key = cv2.waitKey(1) & 0xFF
+                    if key == ord('q'):
+                        logger.info("🛑 Quit requested by user")
+                        self.stop()
+                        break
+                    elif key == ord('s'):
+                        logger.info("📊 Stats - Frames received: {}, displayed: {}".format(
+                            self.frames_received, self.frames_displayed))
+                    elif key == ord('r'):
+                        logger.info("🔄 Reset requested")
+                        self.frames_received = 0
+                        self.frames_displayed = 0
+                        self.start_time = time.time()
+                
+                time.sleep(0.033)  # ~30 FPS display rate
+                
+            except Exception as e:
+                logger.error(f"❌ Display loop error: {e}")
+                time.sleep(0.1)
+        
+        cv2.destroyAllWindows()
+        logger.info("🖥️  Display loop stopped")
+    
+    def start(self):
+        """Start the AI system"""
+        logger.info("=" * 60)
+        logger.info("🚀 NIMBUS AI SYSTEM STARTING")
+        logger.info("=" * 60)
+        logger.info("Pipeline: Camo -> ROS2 -> AI.py -> Processing -> Display")
+        logger.info("Currently in pass-through mode (no AI processing)")
+        logger.info("")
+        
+        # Connect to ROS2
+        if not self.connect_to_ros2():
+            logger.error("❌ Failed to connect to ROS2")
+            return False
+        
+        # Start display thread
+        self.is_running = True
+        self.display_thread = threading.Thread(target=self._display_loop, daemon=True)
+        self.display_thread.start()
+        
+        logger.info("✅ Nimbus AI System running")
+        logger.info("📹 Waiting for video feed from ROS2...")
+        logger.info("🎮 Controls: 'q' = quit, 's' = stats, 'r' = reset")
+        logger.info("")
+        
+        return True
+    
+    def stop(self):
+        """Stop the AI system"""
+        logger.info("🛑 Stopping Nimbus AI System...")
+        
+        self.is_running = False
+        
+        # Close WebSocket connection
+        if self.ws:
+            self.ws.close()
+        
+        # Wait for threads to finish
+        if self.display_thread and self.display_thread.is_alive():
+            self.display_thread.join(timeout=2)
+        
+        # Show final stats
+        if self.start_time:
+            elapsed = time.time() - self.start_time
+            logger.info(f"📊 Final Stats:")
+            logger.info(f"   Frames received: {self.frames_received}")
+            logger.info(f"   Frames displayed: {self.frames_displayed}")
+            logger.info(f"   Runtime: {elapsed:.1f}s")
+            if elapsed > 0:
+                logger.info(f"   Average FPS: {self.frames_received / elapsed:.1f}")
+        
+        logger.info("✅ Nimbus AI System stopped")
+    
+    def run(self):
+        """Main run method - keeps system alive"""
+        try:
+            if not self.start():
+                return
+            
+            # Keep main thread alive
+            while self.is_running and self.ws_connected:
+                time.sleep(1)
+                
+        except KeyboardInterrupt:
+            logger.info("🛑 Keyboard interrupt received")
+        finally:
+            self.stop()
 
-# Singleton instance for global access
-ai_system = NimbusAI()
+def main():
+    """Main entry point following AI-old.py pattern"""
+    logger.info("🤖 Initializing Nimbus AI System...")
+    
+    # Initialize AI system
+    ai_system = NimbusAISystem()
+    
+    try:
+        # Run the system
+        ai_system.run()
+        
+    except Exception as e:
+        logger.error(f"❌ Fatal error: {e}")
+    finally:
+        logger.info("👋 Nimbus AI System shutdown complete")
 
-def get_ai_system() -> NimbusAI:
-    # Get the global AI system instance
-    return ai_system
+if __name__ == "__main__":
+    main()
