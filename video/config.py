@@ -36,7 +36,7 @@ CAMERA_SETTINGS = {
 
 # Display settings
 DISPLAY_SETTINGS = {
-    'window_name': 'Camo Studio Test',
+    'window_name': 'Nimbus Camera Feed',
     'window_size': (1280, 720),
     'show_fps': True,
     'show_resolution': True,
@@ -44,9 +44,9 @@ DISPLAY_SETTINGS = {
     'fps_update_interval': 30  # frames
 }
 
-# Performance settings optimized for 14700KF (28 threads)
+# Performance settings optimized for multi-core systems
 PERFORMANCE_SETTINGS = {
-    'max_fps': 30,  # Match Camo Studio's 30fps limit
+    'max_fps': 30,  # Standard 30fps limit
     'buffer_size': 1,
     'use_threading': True,
     'frame_skip_threshold': 2,  # Very aggressive frame skipping
