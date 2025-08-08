@@ -29,10 +29,10 @@ _What you’ve built, implemented, tested or reviewed and an estimate as to how 
 📌 2. Current Tasks in Progress
 _What you’re actively working on. Include blockers if any._
 
-Task	Description	ETA	Blockers
-			
-			
-			
+| Task | Description | ETA | Blockers |
+|------|-------------|-----|----------|
+|      |             |     |          |
+|      |             |     |          |
 
 📅 3. Upcoming Tasks
 _Planned work for the next sprint or phase._
