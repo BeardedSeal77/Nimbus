@@ -1,0 +1,3 @@
+week one, was talking, thinking about how to set up ros2 and doing research.
+
+week two was about implementing the modules on the AI system, getting them to work seperately and then beginning to add everything together and integrate it to flow through the ros2 container. getting the inputs to go into the ros2 container and then subscribing the AI containter to those data sources (video and audio)

@@ -175,3 +175,4 @@ cython_debug/
 
 # YOLO model weights
 *.pt
+/Ed
