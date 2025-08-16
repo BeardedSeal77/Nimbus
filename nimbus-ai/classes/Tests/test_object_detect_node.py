@@ -1,5 +1,5 @@
 import cv2
-from nimbus.AI.classes.object_detect_node import object_detect_node
+from nimbus-AI.classes.object_detect_node import object_detect_node
 
 def test_yolo_on_image():
     image_path = "nimbus/AI/classes/Tests/test_image.jpg"

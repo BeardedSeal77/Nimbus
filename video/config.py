@@ -18,9 +18,9 @@ CAMERA_SETTINGS = {
     
     # Resolution preferences (try in order)
     'resolutions': [
-        (1920, 1080),  # 1080p
-        (1280, 720),   # 720p  
-        (640, 480),    # VGA
+        # (1920, 1080),  # 1080p+
+        # (1280, 720),   # 720p  
+        # (640, 480),    # VGA
         (320, 240)     # QVGA
     ],
     
@@ -37,16 +37,16 @@ CAMERA_SETTINGS = {
 # Display settings
 DISPLAY_SETTINGS = {
     'window_name': 'Nimbus Camera Feed',
-    'window_size': (1280, 720),
+    'window_size': (320, 240),
     'show_fps': True,
     'show_resolution': True,
     'show_timestamp': True,
-    'fps_update_interval': 30  # frames
+    'fps_update_interval': 100  # frames
 }
 
 # Performance settings optimized for multi-core systems
 PERFORMANCE_SETTINGS = {
-    'max_fps': 30,  # Standard 30fps limit
+    'max_fps': 15,  # Standard 30fps limit
     'buffer_size': 1,
     'use_threading': True,
     'frame_skip_threshold': 2,  # Very aggressive frame skipping

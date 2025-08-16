@@ -1,0 +1,160 @@
+NIMBUS AI SYSTEM ARCHITECTURE FLOWCHART
+==========================================
+
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                                    AI.py                                       │
+│                              (Main Coordinator)                                │
+│                                                                                 │
+│  GLOBAL VARIABLES:                                                              │
+│  • FRAME_PROCESSING_INTERVAL_MS = 200                                          │
+│  • ACTIVATION_PHRASES = ["ok drone"]                                           │
+│  • GLOBAL_INTENT = ""                                                          │
+│  • GLOBAL_OBJECT = ""                                                          │
+│  • GLOBAL_TARGET_DISTANCE = 0.0                                                │
+│  • GLOBAL_STATE_ACTIVE = False                                                 │
+│  • GLOBAL_COMMAND_STATUS = "none"  # "new", "processing", "complete"          │
+└─────────────────────────────────────────────────────────────────────────────────┘
+                                      │
+                    ┌─────────────────┴─────────────────┐
+                    │                                   │
+                    ▼                                   ▼
+┌─────────────────────────────────────────┐          ┌──────────────────────────────────┐
+│            VIDEO BRANCH                 │          │         AUDIO BRANCH             │
+└─────────────────────────────────────────┘          └──────────────────────────────────┘
+
+VIDEO BRANCH - PARALLEL PATHS:                    AUDIO BRANCH - PARALLEL PATHS:
+═══════════════════════════════                    ═══════════════════════════════
+
+     ┌─────────────────┐                                ┌─────────────────┐
+     │   ROS2 Camera   │                                │   Microphone    │
+     │   Live Stream   │                                │   Live Stream   │
+     │  (Full FPS)     │                                │  (Continuous)   │
+     └─────────┬───────┘                                └─────────┬───────┘
+               │                                                  │
+               ├────────────────┐                                 │
+               │                │                                 │
+               ▼                ▼                                 ▼
+┌─────────────────────┐ ┌─────────────────────┐         ┌─────────────────┐
+│    LIVE PATH        │ │   PROCESSING PATH   │         │ Activation Word │
+│ (Continuous Video)  │ │   (Every 200ms)     │         │   Detection     │
+│                     │ │                     │         │ ("ok drone")   │
+└─────────┬───────────┘ └─────────┬───────────┘         └─────────┬───────┘
+          │                       │                               │
+          │               ┌───────▼────────┐                      ▼ (When activated)
+          │               │ Extract Single │            ┌─────────────────┐
+          │               │     Frame      │            │ Voice Recording │
+          │               │                │            │ (Until pause)   │
+          │               └───────┬────────┘            └─────────┬───────┘
+          │                       │                               │
+          │                       ▼                               ▼
+          │               ┌───────────────────┐         ┌─────────────────┐
+          │               │object_detect_node │         │   stt_node.py   │
+          │               │     .py           │         │ (Whisper STT)   │
+          │               │   (YOLOv8)        │         └─────────┬───────┘
+          │               │                   │                   
+          │               │                   │                   ▼
+          │               │ GLOBAL_INTENT     │         ┌─────────────────┐
+          │               │ GLOBAL_OBJECT     │         │intent_object_   │
+          │               │ GLOBAL_COMMAND_   │         │   node.py       │
+          │               │ STATUS            │         │ (Ollama LLM)    │
+          │               └───────┬───────────┘         └─────────┬───────┘
+          │                       │                               │
+          │                       ▼                               ▼
+          │       ┌───────────────────────────┐         ┌─────────────────┐
+          │       │ If GLOBAL_COMMAND_STATUS  │         │ Update Global   │
+          │       │ == "new" &&               │         │  Variables:     │
+          │       │ GLOBAL_INTENT == "go":    │         │ GLOBAL_INTENT   │
+          │       │                           │         │ GLOBAL_OBJECT   │
+          │       │ 1. Run depth_node.py      │         │ GLOBAL_COMMAND_ │
+          │       │ 2. Set GLOBAL_TARGET_     │         │ STATUS = "new"  │
+          │       │    DISTANCE               │         │                 │
+          │       │ 3. Set GLOBAL_COMMAND_    │         └─────────┬───────┘
+          │       │    STATUS = "processing"  │                   │
+          │       └───────┬───────────────────┘                   ▼
+          │               │                             ┌─────────────────┐
+          │               ▼                             │ Signal Video    │
+          │       ┌───────────────────┐                 │ Processing Path │
+          │       │ Else: Continue    │                 │ to Check for    │
+          │       │ with regular      │                 │ New Command     │
+          │       │ object detection  │                 └─────────────────┘
+          │       │ (no depth calc)   │ 
+          │       └───────┬───────────┘
+          │               │                                         │
+          │               ▼                                         ▼
+          │       ┌───────────────────┐                   ┌─────────────────┐
+          │       │ Create Bounding   │                   │ Continue to...  │
+          │       │   Box Overlay     │                   │   (nothing)     │
+          │       │                   │                   └─────────────────┘
+          │       └───────┬───────────┘
+          │               │
+          │               ▼
+          │       ┌───────────────────┐
+          │       │ Overlay Data      │
+          │       │ (Bounding boxes,  │
+          │       │  labels, etc.)    │
+          │       └───────┬───────────┘
+          │               │
+          │               ▼
+          └─────────►┌─────────────────┐
+                     │ MERGE & DISPLAY │
+                     │                 │
+                     │ Live Video +    │
+                     │ AI Overlays     │
+                     │                 │
+                     │ Refresh Rate:   │
+                     │ Video: Full FPS │
+                     │ Overlay: 200ms  │
+                     └─────────────────┘
+
+BACKGROUND PROCESSES:
+═══════════════════
+
+┌─────────────────┐
+│ rtabmap_node.py │
+│ (SLAM - runs    │
+│  continuously)  │
+└─────────────────┘
+
+GLOBAL STATE MANAGEMENT:
+═══════════════════════
+
+┌─────────────────────────────────────┐
+│         PERSISTENT VARIABLES        │
+├─────────────────────────────────────┤
+│ FRAME_PROCESSING_INTERVAL_MS = 200  │
+│ ACTIVATION_PHRASES = ["ok drone"]   │
+│ GLOBAL_INTENT = ""                  │
+│ GLOBAL_OBJECT = ""                  │
+│ GLOBAL_TARGET_DISTANCE = 0.0        │
+│ GLOBAL_STATE_ACTIVE = False         │
+│ GLOBAL_COMMAND_STATUS = "none"      │
+└─────────────────────────────────────┘
+
+COMMAND STATUS FLOW:
+═══════════════════
+
+"none" → Voice Command → "new" → Distance Calculated → "processing" → Flight Complete → "complete"
+
+State Transitions:
+• "none": No active command
+• "new": Fresh command received, needs distance calculation
+• "processing": Distance calculated, drone executing command  
+• "complete": Command finished, ready for next command
+
+TIMING CHARACTERISTICS:
+═════════════════════
+
+Video Pipeline:  Continuous live stream + 200ms AI processing
+Audio Pipeline:  Event-driven (only on voice activation)
+Depth Calc:      One-time (when new command issued)
+SLAM:           Background continuous
+Display:        ~30 FPS live video with 200ms overlay refresh
+
+THREAD ARCHITECTURE:
+══════════════════
+
+Main Thread:     AI.py coordination
+Video Thread:    Live stream + periodic object detection  
+Audio Thread:    Voice activation + command processing
+SLAM Thread:     Background localization
+Display Thread:  Video rendering with overlays

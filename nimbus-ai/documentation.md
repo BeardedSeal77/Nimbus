@@ -1,131 +1,163 @@
 # Nimbus AI Container Documentation
 
 ## Overview
-The Nimbus AI container is a modular Python layer designed for drone control operations. It consists of independent processing nodes that can be orchestrated by a ROS2 container to enable natural language-based drone navigation and environmental understanding.
+The Nimbus AI container is a parallel processing system designed for real-time drone control operations. It features **dual-pipeline architecture** combining live video streaming with periodic AI processing and activation-based voice command processing. The system provides responsive visual feedback while maintaining computational efficiency.
 
-## Architecture
-The AI container follows a **node-based modular architecture** where each Python file represents a discrete processing unit with defined inputs and outputs. This design enables:
-- **Modularity**: Each node can be developed, tested, and deployed independently
-- **Scalability**: Nodes can be distributed across different containers or processes
-- **Maintainability**: Clear separation of concerns with defined interfaces
-- **ROS2 Integration**: Easy integration as ROS2 services or action servers
+## System Architecture
+The AI container employs a **parallel dual-pipeline architecture**:
+
+### Video Pipeline (Continuous)
+- **Live Video Stream**: Continuous video feed from ROS2 at full framerate
+- **Periodic AI Processing**: Frame extraction every 200ms (configurable) for AI analysis
+- **Overlay System**: Real-time overlay of bounding boxes and AI results on live video
+- **Visual Feedback**: Immediate visual response with 200ms refresh rate for AI overlays
+
+### Audio Pipeline (Event-Driven)
+- **Activation Detection**: Listens for activation phrases ("ok drone", configurable list)
+- **Voice Capture**: Records audio snippet after activation until user pause
+- **Intent Processing**: Sends transcript to Ollama for structured output extraction
+- **Global State Management**: Sets persistent global variables (intent, object) for flight duration
+
+This architecture enables:
+- **Real-time Responsiveness**: Live video with minimal latency
+- **Computational Efficiency**: AI processing only on selected frames
+- **Natural Interaction**: Voice activation system similar to smart assistants
+- **Persistent State**: Command context maintained throughout flight
+
+## Configuration Variables
+
+### Global Processing Parameters
+```python
+# Frame processing interval (default: 200ms)
+FRAME_PROCESSING_INTERVAL_MS = 200
+
+# Voice activation phrases (expandable list)
+ACTIVATION_PHRASES = ["ok drone", "hey nimbus", "drone activate"]
+
+# Global state variables (persistent during flight)
+GLOBAL_INTENT = ""      # Current flight intent: "go", "stop", "cancel", "home", "land"
+GLOBAL_OBJECT = ""      # Current target object: "chair", "table", etc.
+GLOBAL_STATE_ACTIVE = False  # Whether global state is set and active
+```
 
 ## AI Processing Nodes
 
-### 1. Speech-to-Text Node (`stt_node.py`)
-**Purpose**: Converts audio input to text transcript
-- **Technology**: Whisper (HuggingFace model)
-- **Input**: Microphone audio stream
+### 1. Object Detection Node (`object_detect_node.py`)
+**Purpose**: Processes individual frames for object detection and bounding box generation
+- **Technology**: YOLOv8 (ultralytics)
+- **Trigger**: Called every 200ms on extracted video frames
+- **Input**: Intent, target object, single video frame
+- **Output**: Bounding box coordinates (x, y, width, height)
+- **Use Case**: Creates overlay data for live video feed
+
+```python
+# Current signature:
+def object_detect_node(intent: str, target_object: str, video_frame: np.ndarray) -> dict:
+    # Processes single frame with YOLO
+    # Returns: {'x': x1, 'y': y1, 'width': w, 'height': h} or {}
+```
+
+### 2. Speech-to-Text Node (`stt_node.py`) 
+**Purpose**: Converts voice snippets to text after activation phrase detection
+- **Technology**: Whisper (OpenAI/HuggingFace)
+- **Trigger**: Only after activation phrase detected
+- **Input**: Audio snippet (from activation to user pause)
 - **Output**: Text transcript
-- **Use Case**: First step in the voice command pipeline
+- **Use Case**: Voice command transcription for intent extraction
 
 ```python
-# Expected signature:
-def stt_node(audio_data):
-    # Process audio with Whisper model
-    return transcript
+# Current signature:
+def stt_node(audio_data: np.ndarray, sample_rate: int = 44100) -> str:
+    # Processes audio snippet with Whisper
+    # Returns: "go to the chair" (example transcript)
 ```
 
-### 2. Intent & Object Extraction Node (`intent_object_node.py`)
-**Purpose**: Extracts both user intent and target objects from natural language in a single pass
-- **Technology**: Ollama with structured system prompt
-- **Input**: Text transcript
-- **Output**: JSON response containing intent and object
-- **Use Case**: Efficiently parses commands like "go to the chair" into structured data
+### 3. Intent & Object Extraction Node (`intent_object_node.py`)
+**Purpose**: Extracts structured commands from voice transcripts using LLM
+- **Technology**: Ollama (llama3:latest) with structured prompting
+- **Trigger**: Called after successful voice transcription
+- **Input**: Text transcript from STT
+- **Output**: Structured JSON with intent and object
+- **Use Case**: Converts natural language to actionable drone commands
 
-**System Prompt**:
-```
-you are an AI interlayer for a drone. you need to extract entities from a user input.
-your response should be in JSON format.
-response:
-{
-"intent": (IN "Go", "Cancel", "Home")
-"Object": (like "table", "chair", "stairs")
-}
-```
+**Supported Intents**: go, stop, cancel, home, land
 
 ```python
-# Expected signature:
-def intent_object_node(transcript):
-    # Extract both intent and object using LLM with structured prompt
-    return {
-        "intent": "Go",
-        "object": "chair"
-    }
-```
-
-### 3. Object Detection Node (`object_detect_node.py`)
-**Purpose**: Visual object detection in camera feed
-- **Technology**: YOLO "latest" (likely YOLOv8)
-- **Input**: Intent, object name, video stream
-- **Output**: Bounding box coordinates
-- **Use Case**: Locates target objects visually in the environment
-
-```python
-# Expected signature:
-def object_detect_node(intent, object_name, video_frame):
-    # Run YOLO detection
-    return bounding_box
+# Current signature:
+def intent_object_node(transcript: str) -> Dict[str, str]:
+    # Uses Ollama with structured system prompt
+    # Returns: {"intent": "go", "object": "chair"}
 ```
 
 ### 4. Depth Estimation Node (`depth_node.py`)
-**Purpose**: Calculates 3D position of detected objects
-- **Technology**: OpenCV, RTAB-Map
-- **Input**: Intent, bounding box, video stream, camera pose
-- **Output**: Object pose (3D position and orientation)
-- **Use Case**: Provides spatial coordinates for navigation
+**Purpose**: Calculates initial 3D distance to target object when command is first given
+- **Technology**: OpenCV, RTAB-Map integration
+- **Trigger**: Once when new intent/object command is processed (not during tracking)
+- **Input**: Bounding box, video frame, camera pose
+- **Output**: Object distance and 3D position
+- **Use Case**: Provides initial target distance for navigation planning
 
 ```python
 # Expected signature:
 def depth_node(intent, bounding_box, video_frame, camera_pose):
-    # Calculate 3D position using depth data
-    return object_pose
+    # Calculate initial 3D position and distance to target
+    return {"distance": float, "position": {"x": float, "y": float, "z": float}}
 ```
 
-### 5. RTAB-Map SLAM Node (`rtabmap_node.py`)
-**Purpose**: Simultaneous Localization and Mapping
+### 5. RTAB-Map SLAM Node (`rtabmap_node.py`) - Background Process
+**Purpose**: Continuous localization and mapping (runs independently)
 - **Technology**: RTAB-Map
-- **Input**: SLAM video, depth camera data
+- **Trigger**: Continuous background processing
+- **Input**: Video stream, depth camera data
 - **Output**: Camera pose (position and orientation in 3D space)
-- **Use Case**: Maintains spatial awareness and camera tracking
+- **Use Case**: Maintains spatial awareness for depth calculations
 
-```python
-# Expected signature:
-def rtabmap_node(video_stream, depth_data):
-    # Perform SLAM operations
-    return camera_pose
-```
-
-### 6. Survey Node (`survey_node.py`)
-**Purpose**: Comprehensive environment scanning
-- **Technology**: Loops YOLO, Depth node, RTAB-Map node
-- **Input**: Intent="survey", video stream, depth camera, camera pose
-- **Output**: Scene objects (array of object poses)
-- **Use Case**: Creates a complete 3D map of all objects in the environment
-
-```python
-# Expected signature:
-def survey_node(video_stream, depth_data, camera_pose):
-    # Orchestrate multiple detection cycles
-    return scene_objects_array
-```
+### 6. Survey Node (`survey_node.py`) - Future Enhancement
+**Purpose**: Comprehensive environment scanning (special command mode)
+- **Technology**: Coordinates multiple detection cycles
+- **Trigger**: When global intent is set to "survey"
+- **Input**: Video stream, depth camera, camera pose
+- **Output**: Scene objects with distances (array of object poses)
+- **Use Case**: Creates complete 3D map of environment objects
 
 ## Data Flow Pipeline
 
-### Standard Command Processing Flow:
-1. **Audio Input** → `stt_node()` → **Transcript**
-2. **Transcript** → `intent_object_node()` → **Intent + Object (JSON)**
-3. **Intent + Object + Video** → `object_detect_node()` → **Bounding Box**
-4. **Intent + Bounding Box + Video + Camera Pose** → `depth_node()` → **Object Pose**
-5. **Video + Depth Data** → `rtabmap_node()` → **Camera Pose** (continuous)
+### Parallel Processing Architecture
 
-### Survey Mode Flow:
-1. **"Survey" Intent** → `survey_node()` 
-2. **Survey Node** internally loops:
-   - `object_detect_node()` for multiple objects
-   - `depth_node()` for each detection
-   - `rtabmap_node()` for continuous pose updates
-3. **Output**: Complete scene understanding
+#### Video Pipeline (Continuous - Live Feed with Overlays)
+```
+Live Video Stream (ROS2) → AI.py → Display with Overlays
+    ↓ (every 200ms)
+Extract Frame → object_detect_node() → Bounding Box → Overlay on Live Video
+    ↑ (uses current GLOBAL_INTENT & GLOBAL_OBJECT)
+```
+
+#### Audio Pipeline (Event-Driven - Voice Commands)
+```
+Microphone → Activation Detection ("ok drone") → Voice Recording → stt_node() → Transcript
+    ↓
+intent_object_node() → {"intent": "go", "object": "chair"} → Update Global Variables
+    ↓ (when new command issued)
+GLOBAL_INTENT = "go", GLOBAL_OBJECT = "chair" → Triggers initial depth calculation
+    ↓
+object_detect_node() → Bounding Box → depth_node() → Target Distance → Navigation Start
+```
+
+### Command Processing Flow:
+1. **Voice Activation**: "ok drone" detected → Start recording
+2. **Voice Capture**: Record until user pause → Audio snippet
+3. **Transcription**: `stt_node(audio_snippet)` → "go to the chair"
+4. **Intent Extraction**: `intent_object_node(transcript)` → {"intent": "go", "object": "chair"}
+5. **Global State Update**: Set GLOBAL_INTENT="go", GLOBAL_OBJECT="chair"
+6. **Initial Detection**: `object_detect_node()` finds chair → Bounding box
+7. **Distance Calculation**: `depth_node()` → Target distance (one-time)
+8. **Navigation Start**: Send target distance to drone navigation
+9. **Continuous Tracking**: object_detect_node() every 200ms for visual feedback
+
+### Background Processes:
+- **RTAB-Map SLAM**: Continuous camera pose tracking
+- **Live Video**: Uninterrupted feed with 200ms overlay refresh
+- **Global State**: Persistent intent/object variables during flight
 
 ## ROS2 Integration Strategy
 
