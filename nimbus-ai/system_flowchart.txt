@@ -2,17 +2,17 @@ NIMBUS AI SYSTEM ARCHITECTURE FLOWCHART
 ==========================================
 
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                                    AI.py                                       │
-│                              (Main Coordinator)                                │
+│                                    AI.py                                        │
+│                              (Main Coordinator)                                 │
 │                                                                                 │
 │  GLOBAL VARIABLES:                                                              │
-│  • FRAME_PROCESSING_INTERVAL_MS = 200                                          │
-│  • ACTIVATION_PHRASES = ["ok drone"]                                           │
-│  • GLOBAL_INTENT = ""                                                          │
-│  • GLOBAL_OBJECT = ""                                                          │
-│  • GLOBAL_TARGET_DISTANCE = 0.0                                                │
-│  • GLOBAL_STATE_ACTIVE = False                                                 │
-│  • GLOBAL_COMMAND_STATUS = "none"  # "new", "processing", "complete"          │
+│  • FRAME_PROCESSING_INTERVAL_MS = 200                                           │
+│  • ACTIVATION_PHRASES = ["ok drone"]                                            │
+│  • GLOBAL_INTENT = ""                                                           │
+│  • GLOBAL_OBJECT = ""                                                           │
+│  • GLOBAL_TARGET_DISTANCE = 0.0                                                 │
+│  • GLOBAL_STATE_ACTIVE = False                                                  │
+│  • GLOBAL_COMMAND_STATUS = "none"  # "new", "processing", "complete"            │
 └─────────────────────────────────────────────────────────────────────────────────┘
                                       │
                     ┌─────────────────┴─────────────────┐
@@ -37,7 +37,7 @@ VIDEO BRANCH - PARALLEL PATHS:                    AUDIO BRANCH - PARALLEL PATHS:
 ┌─────────────────────┐ ┌─────────────────────┐         ┌─────────────────┐
 │    LIVE PATH        │ │   PROCESSING PATH   │         │ Activation Word │
 │ (Continuous Video)  │ │   (Every 200ms)     │         │   Detection     │
-│                     │ │                     │         │ ("ok drone")   │
+│                     │ │                     │         │ ("ok drone")    │
 └─────────┬───────────┘ └─────────┬───────────┘         └─────────┬───────┘
           │                       │                               │
           │               ┌───────▼────────┐                      ▼ (When activated)
@@ -51,7 +51,7 @@ VIDEO BRANCH - PARALLEL PATHS:                    AUDIO BRANCH - PARALLEL PATHS:
           │               │object_detect_node │         │   stt_node.py   │
           │               │     .py           │         │ (Whisper STT)   │
           │               │   (YOLOv8)        │         └─────────┬───────┘
-          │               │                   │                   
+          │               │                   │                   │
           │               │                   │                   ▼
           │               │ GLOBAL_INTENT     │         ┌─────────────────┐
           │               │ GLOBAL_OBJECT     │         │intent_object_   │
