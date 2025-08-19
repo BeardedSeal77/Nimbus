@@ -17,8 +17,6 @@ import sys
 import os
 from typing import Optional, Dict, Any
 from datetime import datetime
-from queue import Queue, Empty
-from threading import Lock
 # Import nimbus-ai helpers and scripts
 from helpers.display import ProcessedDisplay
 
@@ -26,15 +24,14 @@ from helpers.display import ProcessedDisplay
 project_root = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(project_root)
 
-# Global configuration variables
-FRAME_PROCESSING_INTERVAL_MS = 100  # Process frames every 200ms
-ACTIVATION_PHRASES = ["ok drone", "hey nimbus", "drone activate"]
-GLOBAL_INTENT = ""  # Current flight intent
-GLOBAL_OBJECT = "Person"  # Current target object
-GLOBAL_GET_DIST = 1
-GLOBAL_TARGET_DISTANCE = 0.0
-GLOBAL_STATE_ACTIVE = False
-GLOBAL_COMMAND_STATUS = "none"  # "new", "processing", "complete" 
+# │  GLOBAL VARIABLES:                                                              │
+# │  • FRAME_PROCESSING_INTERVAL_MS = 200                                           │
+# │  • ACTIVATION_PHRASES = ["ok drone"]                                            │
+# │  • GLOBAL_INTENT = ""                                                           │
+# │  • GLOBAL_OBJECT = ""                                                           │
+# │  • GLOBAL_TARGET_DISTANCE = 0.0                                                 │
+# │  • GLOBAL_STATE_ACTIVE = False                                                  │
+# │  • GLOBAL_COMMAND_STATUS = "none"  # "new", "processing", "complete" 
 
 
 
@@ -78,27 +75,8 @@ class NimbusAISystem:
         self.is_running = False
         self.display_thread = None
         
-        # AI processing with parallel architecture
-        self.ai_processing_enabled = True
-        
-        # Frame queue for parallel processing
-        self.frame_queue = Queue(maxsize=2)  # Small queue to avoid memory buildup
-        self.latest_detection_result = {}
-        self.detection_result_lock = Lock()
-        
-        # AI processing thread
-        self.ai_thread = None
-        self.ai_thread_running = False
-        
-        # Import object detector
-        try:
-            from classes.object_detect_node_v11 import ObjectDetector
-            self.object_detector = ObjectDetector()
-            logger.info("✅ Object detector loaded")
-        except ImportError as e:
-            logger.warning(f"⚠️ Object detector not available: {e}")
-            self.object_detector = None
-            self.ai_processing_enabled = False
+        # AI processing placeholder (we'll add real processing later)
+        self.ai_processing_enabled = False
         
     def connect_to_ros2(self) -> bool:
         """Connect to ROS2 via rosbridge websocket"""
@@ -241,102 +219,27 @@ class NimbusAISystem:
     
     def _process_frame(self, frame: np.ndarray) -> Dict[str, Any]:
         """
-        Process incoming video frame - runs at full video framerate
-        Queues frames for parallel AI processing every 200ms
+        Process frame through AI pipeline
+        Currently a placeholder - will add real AI processing later
         """
-        # Add frame to processing queue if AI is enabled
-        if self.ai_processing_enabled and self.object_detector and GLOBAL_OBJECT:
-            try:
-                # Non-blocking put - if queue is full, skip this frame
-                self.frame_queue.put_nowait(frame.copy())
-            except:
-                pass  # Queue full, skip this frame
-        
-        # Get latest detection results (thread-safe)
-        with self.detection_result_lock:
-            latest_result = self.latest_detection_result.copy()
-        
-        # Create result for display
+        # Placeholder AI processing result
         ai_result = {
             'camera_pose': None,
-            'bounding_box': latest_result.get('bounding_box'),
+            'bounding_box': None,
             'object_pose': None,
-            'processing_status': latest_result.get('processing_status', 'live_stream'),
+            'processing_status': 'pass_through',
             'frame_shape': frame.shape,
-            'timestamp': datetime.now(),
-            'target_object': GLOBAL_OBJECT,
-            'intent': GLOBAL_INTENT
+            'timestamp': datetime.now()
         }
         
+        # TODO: Add real AI processing here
+        # This is where we'll integrate:
+        # - SLAM processing
+        # - Object detection
+        # - Depth estimation
+        # - Intent processing
+        
         return ai_result
-    
-    def _ai_processing_loop(self):
-        """
-        AI processing loop - runs in parallel thread
-        Processes frames from queue every 200ms for object detection
-        """
-        logger.info("🧠 AI processing loop started")
-        last_processing_time = 0
-        
-        while self.ai_thread_running:
-            try:
-                current_time = time.time() * 1000  # Convert to milliseconds
-                
-                # Check if it's time for processing (200ms interval)
-                if (current_time - last_processing_time) >= FRAME_PROCESSING_INTERVAL_MS:
-                    try:
-                        # Get latest frame from queue (non-blocking)
-                        frame = self.frame_queue.get_nowait()
-                        
-                        if GLOBAL_OBJECT:
-                            logger.debug(f"🔍 Processing frame for object: {GLOBAL_OBJECT}")
-                            
-                            # Run object detection
-                            detection_result = self.object_detector.detect(GLOBAL_OBJECT, frame)
-                            
-                            # Update shared results (thread-safe)
-                            with self.detection_result_lock:
-                                if detection_result:  # Object found
-                                    self.latest_detection_result = {
-                                        'bounding_box': {
-                                            'x': detection_result['x'],
-                                            'y': detection_result['y'], 
-                                            'width': detection_result['width'],
-                                            'height': detection_result['height'],
-                                            'object_name': GLOBAL_OBJECT,
-                                            'confidence': 0.85  # Placeholder confidence
-                                        },
-                                        'processing_status': 'object_detected'
-                                    }
-                                    logger.info(f"✅ Object detected: {GLOBAL_OBJECT}")
-                                else:
-                                    self.latest_detection_result = {
-                                        'bounding_box': None,
-                                        'processing_status': 'object_searching'
-                                    }
-                                    logger.debug(f"🔍 Searching for: {GLOBAL_OBJECT}")
-                            
-                            last_processing_time = current_time
-                        
-                    except Empty:
-                        # No frame available, continue
-                        pass
-                    except Exception as e:
-                        logger.error(f"❌ Object detection failed: {e}")
-                        with self.detection_result_lock:
-                            self.latest_detection_result = {
-                                'bounding_box': None,
-                                'processing_status': 'detection_error'
-                            }
-                
-                # Small sleep to prevent busy waiting
-                time.sleep(0.01)  # 10ms sleep
-                
-            except Exception as e:
-                logger.error(f"❌ AI processing loop error: {e}")
-                time.sleep(0.1)
-        
-        logger.info("🧠 AI processing loop stopped")
     
     def _display_loop(self):
         """Main display loop - runs in separate thread"""
@@ -389,21 +292,13 @@ class NimbusAISystem:
         logger.info("🚀 NIMBUS AI SYSTEM STARTING")
         logger.info("=" * 60)
         logger.info("Pipeline: Camo -> ROS2 -> AI.py -> Processing -> Display")
-        logger.info(f"AI Processing: {'Enabled' if self.ai_processing_enabled else 'Disabled'}")
-        logger.info(f"Frame Processing Interval: {FRAME_PROCESSING_INTERVAL_MS}ms")
+        logger.info("Currently in pass-through mode (no AI processing)")
         logger.info("")
         
         # Connect to ROS2
         if not self.connect_to_ros2():
             logger.error("❌ Failed to connect to ROS2")
             return False
-        
-        # Start AI processing thread
-        if self.ai_processing_enabled:
-            self.ai_thread_running = True
-            self.ai_thread = threading.Thread(target=self._ai_processing_loop, daemon=True)
-            self.ai_thread.start()
-            logger.info("🧠 AI processing thread started")
         
         # Start display thread
         self.is_running = True
@@ -422,22 +317,14 @@ class NimbusAISystem:
         logger.info("🛑 Stopping Nimbus AI System...")
         
         self.is_running = False
-        self.ai_thread_running = False
         
         # Close WebSocket connection
         if self.ws:
             self.ws.close()
         
-        # Stop AI thread
-        if self.ai_thread and self.ai_thread.is_alive():
-            self.ai_thread.join(timeout=2)
-        
         # Wait for threads to finish
         if self.display_thread and self.display_thread.is_alive():
             self.display_thread.join(timeout=2)
-        
-        if self.ai_thread and self.ai_thread.is_alive():
-            self.ai_thread.join(timeout=2)
         
         # Show final stats
         if self.start_time:

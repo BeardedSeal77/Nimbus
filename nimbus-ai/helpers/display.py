@@ -135,14 +135,41 @@ class ProcessedDisplay:
                 cv2.putText(frame, label_text, (x, y - 5), self.font, 0.6,
                            self.colors['text'], 1)
         
-        # Show target object if searching
+        # Show target object status and search info
+        processing_status = ai_result.get('processing_status', 'unknown')
+        
+        # Show current global state (passed via ai_result to avoid circular import)
+        target_object = ai_result.get('target_object', '')
+        intent = ai_result.get('intent', '')
+        if target_object:
+            status_text = f"Target: {target_object} | Intent: {intent}"
+            cv2.putText(frame, status_text, (10, 150), self.font, 0.6, 
+                       self.colors['info'], 1)
+        
+        # Show processing status
+        status_color = self.colors['slam_good'] if processing_status == 'object_detected' else self.colors['slam_processing']
+        if processing_status == 'object_detected':
+            status_display = "Object Detected!"
+        elif processing_status == 'object_searching':
+            status_display = "Searching for object..."
+        elif processing_status == 'ai_disabled':
+            status_display = "AI Processing Disabled"
+        elif processing_status == 'detection_error':
+            status_display = "Detection Error"
+        else:
+            status_display = "Live Stream"
+            
+        cv2.putText(frame, f"Status: {status_display}", (10, 175), 
+                   self.font, 0.6, status_color, 1)
+        
+        # Show object pose if available
         object_pose = ai_result.get('object_pose')
         if object_pose:
             # Object has been located in 3D space
             pos = object_pose.get('position', {})
             distance = ((pos.get('x', 0)**2 + pos.get('y', 0)**2 + pos.get('z', 0)**2)**0.5)
             
-            cv2.putText(frame, f"Target Distance: {distance:.2f}m", (10, 150), 
+            cv2.putText(frame, f"Target Distance: {distance:.2f}m", (10, 200), 
                        self.font, 0.6, self.colors['slam_good'], 1)
     
     def _add_system_status(self, frame: np.ndarray, ai_result: Dict):
