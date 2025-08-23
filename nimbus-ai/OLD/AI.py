@@ -27,14 +27,22 @@ project_root = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(project_root)
 
 # Global configuration variables
-FRAME_PROCESSING_INTERVAL_MS = 100  # Process frames every 200ms
+FRAME_PROCESSING_INTERVAL_MS = 100  # Process frames every 100ms
 ACTIVATION_PHRASES = ["ok drone", "hey nimbus", "drone activate"]
 GLOBAL_INTENT = ""  # Current flight intent
-GLOBAL_OBJECT = "Person"  # Current target object
+GLOBAL_OBJECT = "chair"  # Current target object
 GLOBAL_GET_DIST = 1
 GLOBAL_TARGET_DISTANCE = 0.0
 GLOBAL_STATE_ACTIVE = False
-GLOBAL_COMMAND_STATUS = "none"  # "new", "processing", "complete" 
+GLOBAL_COMMAND_STATUS = "none"  # "new", "processing", "complete"
+
+# New depth integration variables
+DEPTH_FRAME_INTERVAL = 5  # Every 5th successful detection
+DEPTH_FRAME_COUNT = 5     # Collect 5 frames for SfM
+
+# Processing Flags (Critical for preventing overlaps)
+OBJECT_DETECTION_BUSY = False  # Prevent object detection overlaps
+DEPTH_PROCESSING_BUSY = False  # Prevent depth processing overlaps 
 
 
 
@@ -90,6 +98,11 @@ class NimbusAISystem:
         self.ai_thread = None
         self.ai_thread_running = False
         
+        # Frame collection for depth processing
+        self.depth_frame_buffer = []
+        self.detection_counter = 0
+        self.depth_estimator = None
+        
         # Import object detector
         try:
             from classes.object_detect_node_v11 import ObjectDetector
@@ -99,6 +112,15 @@ class NimbusAISystem:
             logger.warning(f"⚠️ Object detector not available: {e}")
             self.object_detector = None
             self.ai_processing_enabled = False
+        
+        # Import depth estimator
+        try:
+            from classes.depth_node import DepthEstimator
+            self.depth_estimator = DepthEstimator()
+            logger.info("✅ Depth estimator loaded")
+        except ImportError as e:
+            logger.warning(f"⚠️ Depth estimator not available: {e}")
+            self.depth_estimator = None
         
     def connect_to_ros2(self) -> bool:
         """Connect to ROS2 via rosbridge websocket"""
@@ -265,7 +287,12 @@ class NimbusAISystem:
             'frame_shape': frame.shape,
             'timestamp': datetime.now(),
             'target_object': GLOBAL_OBJECT,
-            'intent': GLOBAL_INTENT
+            'intent': GLOBAL_INTENT,
+            'target_distance': latest_result.get('target_distance'),
+            'depth_result': latest_result.get('depth_result'),
+            'depth_frames_collected': latest_result.get('depth_frames_collected'),
+            'depth_frames_needed': latest_result.get('depth_frames_needed'),
+            'global_get_dist': GLOBAL_GET_DIST
         }
         
         return ai_result
@@ -273,16 +300,18 @@ class NimbusAISystem:
     def _ai_processing_loop(self):
         """
         AI processing loop - runs in parallel thread
-        Processes frames from queue every 200ms for object detection
+        Processes frames from queue every 100ms for object detection with sequential depth branching
         """
-        logger.info("🧠 AI processing loop started")
+        global OBJECT_DETECTION_BUSY, DEPTH_PROCESSING_BUSY, GLOBAL_GET_DIST, GLOBAL_TARGET_DISTANCE
+        
+        logger.info("🧠 AI processing loop started with depth integration")
         last_processing_time = 0
         
         while self.ai_thread_running:
             try:
                 current_time = time.time() * 1000  # Convert to milliseconds
                 
-                # Check if it's time for processing (200ms interval)
+                # Check if it's time for processing (100ms interval)
                 if (current_time - last_processing_time) >= FRAME_PROCESSING_INTERVAL_MS:
                     try:
                         # Get latest frame from queue (non-blocking)
@@ -291,30 +320,98 @@ class NimbusAISystem:
                         if GLOBAL_OBJECT:
                             logger.debug(f"🔍 Processing frame for object: {GLOBAL_OBJECT}")
                             
-                            # Run object detection
-                            detection_result = self.object_detector.detect(GLOBAL_OBJECT, frame)
-                            
-                            # Update shared results (thread-safe)
-                            with self.detection_result_lock:
+                            # Step 1: Object Detection (with safety flag)
+                            detection_result = None
+                            if not OBJECT_DETECTION_BUSY:
+                                OBJECT_DETECTION_BUSY = True
+                                try:
+                                    detection_result = self.object_detector.detect(GLOBAL_OBJECT, frame)
+                                finally:
+                                    OBJECT_DETECTION_BUSY = False
+                                
                                 if detection_result:  # Object found
-                                    self.latest_detection_result = {
-                                        'bounding_box': {
-                                            'x': detection_result['x'],
-                                            'y': detection_result['y'], 
-                                            'width': detection_result['width'],
-                                            'height': detection_result['height'],
-                                            'object_name': GLOBAL_OBJECT,
-                                            'confidence': 0.85  # Placeholder confidence
-                                        },
-                                        'processing_status': 'object_detected'
+                                    self.detection_counter += 1
+                                    
+                                    # Create detection result data
+                                    detection_data = {
+                                        'x': detection_result['x'],
+                                        'y': detection_result['y'], 
+                                        'width': detection_result['width'],
+                                        'height': detection_result['height'],
+                                        'object_name': GLOBAL_OBJECT,
+                                        'confidence': 0.85  # Placeholder confidence
                                     }
+                                    
+                                    # Step 2: Depth Collection (only when GLOBAL_GET_DIST=1)
+                                    depth_result = None
+                                    if GLOBAL_GET_DIST == 1 and self.depth_estimator and not DEPTH_PROCESSING_BUSY:
+                                        # Reuse SAME detection result (no duplicate object detection)
+                                        if self.depth_estimator.should_collect_frame():
+                                            logger.debug("🎯 Collecting frame for depth processing")
+                                            depth_result = self.depth_estimator.collect_frame(frame, detection_result)
+                                            
+                                            if depth_result:  # Batch processing complete (5 frames collected)
+                                                GLOBAL_TARGET_DISTANCE = depth_result['distance']
+                                                GLOBAL_GET_DIST = 0  # Turn off depth detection
+                                                logger.info(f"📏 Depth processing complete: {depth_result['distance']:.2f}m")
+                                                
+                                                # Update shared results with combined data
+                                                with self.detection_result_lock:
+                                                    self.latest_detection_result = {
+                                                        'bounding_box': detection_data,
+                                                        'processing_status': 'object_detected_with_depth',
+                                                        'depth_result': depth_result,
+                                                        'target_distance': depth_result['distance']
+                                                    }
+                                            else:
+                                                # Still collecting frames
+                                                with self.detection_result_lock:
+                                                    buffer_count = len(self.depth_estimator.frame_buffer)
+                                                    self.latest_detection_result = {
+                                                        'bounding_box': detection_data,
+                                                        'processing_status': 'collecting_depth_frames',
+                                                        'depth_frames_collected': buffer_count,
+                                                        'depth_frames_needed': DEPTH_FRAME_COUNT
+                                                    }
+                                        else:
+                                            # Object detected but not collecting depth this frame
+                                            with self.detection_result_lock:
+                                                self.latest_detection_result = {
+                                                    'bounding_box': detection_data,
+                                                    'processing_status': 'object_detected'
+                                                }
+                                    elif GLOBAL_GET_DIST == 1 and DEPTH_PROCESSING_BUSY:
+                                        # Skip depth if busy - continue with object detection only
+                                        logger.debug("⏳ Depth processing busy, skipping depth collection")
+                                        with self.detection_result_lock:
+                                            self.latest_detection_result = {
+                                                'bounding_box': detection_data,
+                                                'processing_status': 'object_detected_depth_busy'
+                                            }
+                                    else:
+                                        # GLOBAL_GET_DIST == 0, depth collection is completely skipped
+                                        with self.detection_result_lock:
+                                            self.latest_detection_result = {
+                                                'bounding_box': detection_data,
+                                                'processing_status': 'object_detected',
+                                                'target_distance': GLOBAL_TARGET_DISTANCE if GLOBAL_TARGET_DISTANCE > 0 else None
+                                            }
+                                    
                                     logger.info(f"✅ Object detected: {GLOBAL_OBJECT}")
+                                
                                 else:
-                                    self.latest_detection_result = {
-                                        'bounding_box': None,
-                                        'processing_status': 'object_searching'
-                                    }
+                                    # No object found
+                                    with self.detection_result_lock:
+                                        self.latest_detection_result = {
+                                            'bounding_box': None,
+                                            'processing_status': 'object_searching'
+                                        }
                                     logger.debug(f"🔍 Searching for: {GLOBAL_OBJECT}")
+                            else:
+                                # Skip this cycle if object detection is busy - NO WAITING
+                                logger.debug("⏳ Object detection busy, skipping frame")
+                                # Continue to next 100ms cycle, don't block
+                                pass
                             
                             last_processing_time = current_time
                         

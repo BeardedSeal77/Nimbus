@@ -1,0 +1,24 @@
+to add video:
+
+  Option 1: MJPEG Stream (Easiest)
+
+  # In routes/web_routes.py
+  @web_bp.route('/video_feed')
+  def video_feed():
+      return Response(generate_frames(),
+                     mimetype='multipart/x-mixed-replace; boundary=frame')
+
+  def generate_frames():
+      while True:
+          # Get processed frame from display service
+          frame = get_current_processed_frame()
+          ret, buffer = cv2.imencode('.jpg', frame)
+          frame_bytes = buffer.tobytes()
+          yield (b'--frame\r\n'
+                 b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+
+  Option 2: WebRTC (More Advanced)
+
+  - Real-time, low latency
+  - Two-way communication possible
+  - More complex setup
