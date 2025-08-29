@@ -1,0 +1,1 @@
+# publish dummy object data (label, xyz)
