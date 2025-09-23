@@ -1,60 +1,60 @@
 #!/usr/bin/env python3
 """
-Drone/Robotics Main Application
-Handles drone control, flight operations, and hardware interfaces for the Nimbus system.
+Drone Main Application
+Handles drone control, flight operations, video capture, and ROS2 publishing for the Nimbus system.
 """
 
-import os
-import logging
-from flask import Flask, jsonify, request
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+import rclpy
+from rclpy.node import Node
+from std_msgs.msg import String
+import time
 
-app = Flask(__name__)
+class DroneNode(Node):
+    def __init__(self):
+        super().__init__('drone_node')
+        self.command_sub = self.create_subscription(
+            String,
+            '/drone_command',
+            self.command_callback,
+            10
+        )
+        self.status_pub = self.create_publisher(
+            String,
+            '/drone_status',
+            10
+        )
+        self.get_logger().info('Drone node started, waiting for commands...')
 
-@app.route('/health', methods=['GET'])
-def health_check():
-    return jsonify({'status': 'healthy', 'service': 'nimbus-drone'})
+    def command_callback(self, msg):
+        if msg.data == 'green_light':
+            self.get_logger().info('Received green light from web UI, starting movement sequence')
+            # left 0.5m, up 0.5m, right 0.5m, down 0.5m (back to origin)
+            moves = [
+                ('left', 0.5),
+                ('up', 0.5),
+                ('right', 0.5),
+                ('down', 0.5)
+            ]
+            for direction, distance in moves:
+                self.simulate_move(direction, distance)
+                status_msg = String()
+                status_msg.data = f'Moved {direction} {distance} meters'
+                self.status_pub.publish(status_msg)
+                self.get_logger().info(f'Published status: {status_msg.data}')
 
-@app.route('/drone/status', methods=['GET'])
-def drone_status():
-    return jsonify({
-        'service': 'Drone/Robotics',
-        'status': 'running',
-        'features': ['Flight Control', 'Navigation', 'Hardware Interface']
-    })
+    def simulate_move(self, direction, distance):
+        # Simulate movement
+        # For now, just log and sleep 1 second per move to simulate time taken
+        self.get_logger().info(f'Simulating {direction} movement of {distance} meters...')
+        time.sleep(1)
 
-@app.route('/drone/takeoff', methods=['POST'])
-def takeoff():
-    data = request.get_json() or {}
-    altitude = data.get('altitude', 2.0)
-    logger.info(f"Takeoff command received - altitude: {altitude}m")
-    return jsonify({
-        'status': 'success',
-        'message': f'Takeoff initiated to {altitude}m',
-        'altitude': altitude
-    })
-
-@app.route('/drone/land', methods=['POST'])
-def land():
-    logger.info("Land command received")
-    return jsonify({
-        'status': 'success',
-        'message': 'Landing sequence initiated'
-    })
-
-@app.route('/drone/navigate', methods=['POST'])
-def navigate():
-    data = request.get_json()
-    target_pose = data.get('target_pose', {})
-    logger.info(f"Navigation command: {target_pose}")
-    return jsonify({
-        'status': 'success',
-        'message': 'Navigation started',
-        'target': target_pose
-    })
+def main(args=None):
+    rclpy.init(args=args)
+    drone_node = DroneNode()
+    rclpy.spin(drone_node)
+    drone_node.destroy_node()
+    rclpy.shutdown()
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5004))
-    app.run(host='0.0.0.0', port=port, debug=False)
+    main()
