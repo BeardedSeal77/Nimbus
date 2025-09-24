@@ -1,0 +1,47 @@
+# Dockerfile for ROS2 Humble + Gazebo GUI
+FROM osrf/ros:humble-desktop
+
+# Set non-interactive frontend for apt
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    lsb-release \
+    wget \
+    gnupg \
+    x11-apps \
+    vim \
+    htop \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install ROS2 Gazebo packages
+RUN apt-get update && apt-get install -y \
+    ros-humble-ros-gz \
+    ros-humble-ros-gz-bridge \
+    ros-humble-ros-gz-sim \
+    ros-humble-gazebo-ros-pkgs \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create workspace
+RUN mkdir -p /ros2_ws/src
+
+# Set up ROS2 environment
+RUN echo "source /opt/ros/humble/setup.bash" >> ~/.bashrc
+RUN echo "source /ros2_ws/install/setup.bash" >> ~/.bashrc
+
+# Set Gazebo resource path
+ENV GAZEBO_RESOURCE_PATH=/usr/share/gazebo-11/worlds
+
+# Create alias for sourcing bashrc
+RUN echo "alias sb='source ~/.bashrc'" >> ~/.bashrc
+
+# Set working directory
+WORKDIR /ros2_ws
+
+# Create init script
+RUN echo '#!/bin/bash\nsource /opt/ros/humble/setup.bash\nexec "$@"' > /ros2_ws/init.sh && \
+    chmod +x /ros2_ws/init.sh
+
+# Entry point
+ENTRYPOINT ["/ros2_ws/init.sh"]
+CMD ["bash"]

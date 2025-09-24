@@ -25,6 +25,69 @@ services:
     stdin_open: true
     tty: true
 
+  # Gazebo Simulator (Classic - most stable with ROS2)
+  gazebo-sim:
+    image: gazebo:gzserver11
+    container_name: nimbus-gazebo
+    ports:
+      - 11345:11345  # Gazebo messaging port
+    environment:
+      - ROS_DOMAIN_ID=0
+    networks:
+      - nimbus-network
+    volumes:
+      - ./gazebo-worlds:/worlds:ro
+      - ./gazebo-models:/models:ro
+    command: ["gzserver", "/worlds/drone_world.sdf", "--verbose"]
+    depends_on:
+      - ros2-central
+
+  # X11 Server for Windows
+  x11-server:
+    image: theasp/novnc:latest
+    container_name: nimbus-x11-server
+    environment:
+      - DISPLAY_WIDTH=1280
+      - DISPLAY_HEIGHT=720
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+
+  # ROS2 Humble + Gazebo GUI with X11 forwarding
+  ros2-humble-gazebo:
+    build:
+      context: .
+      dockerfile: Dockerfile.gazebo
+    container_name: ros2_humble_gazebo_harmonic
+    environment:
+      - DISPLAY=x11-server:0.0
+      - ROS_DOMAIN_ID=0
+    volumes:
+      - ./ros2-config:/ros2_ws/src/nimbus_config
+    networks:
+      - nimbus-network
+    privileged: true
+    stdin_open: true
+    tty: true
+    depends_on:
+      - ros2-central
+      - x11-server
+
+  # ROS2-Gazebo Bridge
+  ros2-gz-bridge:
+    image: osrf/ros:humble-desktop
+    container_name: nimbus-gz-bridge
+    environment:
+      - ROS_DOMAIN_ID=0
+    networks:
+      - nimbus-network
+    volumes:
+      - ./ros2-config:/ros2_ws/src/nimbus_config
+    depends_on:
+      - ros2-central
+      - gazebo-sim
+    command: ["bash", "-c", "source /opt/ros/humble/setup.bash && apt update && apt install -y ros-humble-ros-gz-bridge && ros2 run ros_gz_bridge parameter_bridge /camera@sensor_msgs/msg/Image@gz.msgs.Image /cmd_vel@geometry_msgs/msg/Twist@gz.msgs.Twist /odom@nav_msgs/msg/Odometry@gz.msgs.Odometry"]
+
   # Ollama LLM Container
   ollama:
     image: ollama/ollama:latest
