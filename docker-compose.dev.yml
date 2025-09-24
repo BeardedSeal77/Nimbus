@@ -25,6 +25,56 @@ services:
     stdin_open: true
     tty: true
 
+  # VNC Web Client for Gazebo GUI
+  gazebo-gui:
+    image: consol/ubuntu-xfce-vnc:latest
+    container_name: nimbus-gazebo-gui
+    ports:
+      - 6080:6901    # noVNC web interface (HTTP)
+      - 5901:5901    # VNC port
+    environment:
+      - VNC_PW=nimbus123      # VNC password
+      - VNC_RESOLUTION=1280x720
+      - VNC_COL_DEPTH=24
+    volumes:
+      - /dev/shm:/dev/shm
+    networks:
+      - nimbus-network
+    depends_on:
+      - gazebo-sim
+
+  # Gazebo Simulator (Classic - most stable with ROS2)
+  gazebo-sim:
+    image: gazebo:gzserver11
+    container_name: nimbus-gazebo
+    ports:
+      - 11345:11345  # Gazebo messaging port
+    environment:
+      - ROS_DOMAIN_ID=0
+    networks:
+      - nimbus-network
+    volumes:
+      - ./gazebo-worlds:/worlds:ro
+      - ./gazebo-models:/models:ro
+    command: ["gzserver", "/worlds/drone_world.sdf", "--verbose"]
+    depends_on:
+      - ros2-central
+
+  # ROS2-Gazebo Bridge
+  ros2-gz-bridge:
+    image: osrf/ros:humble-desktop
+    container_name: nimbus-gz-bridge
+    environment:
+      - ROS_DOMAIN_ID=0
+    networks:
+      - nimbus-network
+    volumes:
+      - ./ros2-config:/ros2_ws/src/nimbus_config
+    depends_on:
+      - ros2-central
+      - gazebo-sim
+    command: ["bash", "-c", "source /opt/ros/humble/setup.bash && apt update && apt install -y ros-humble-ros-gz-bridge && ros2 run ros_gz_bridge parameter_bridge /camera@sensor_msgs/msg/Image@gz.msgs.Image /cmd_vel@geometry_msgs/msg/Twist@gz.msgs.Twist /odom@nav_msgs/msg/Odometry@gz.msgs.Odometry"]
+
   # Ollama LLM Container
   ollama:
     image: ollama/ollama:latest
