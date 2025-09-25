@@ -35,7 +35,6 @@ class DroneVideoPublisher(Node):
 
     def on_open(self, ws):
         self.get_logger().info('WebSocket opened, starting video stream...')
-        # No subscription needed here; we'll publish
 
     def on_message(self, ws, message):
         pass  # Not needed for publisher
@@ -57,7 +56,6 @@ class DroneVideoPublisher(Node):
                 jpeg_bytes = jpeg_buffer.tobytes()
                 b64data = base64.b64encode(jpeg_bytes).decode('utf-8')
 
-                # Publish messages
                 publish_msg = {
                     "op": "publish",
                     "topic": "/drone_video",
