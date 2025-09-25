@@ -3,10 +3,10 @@
     "allow": [
       "Bash(docker-compose:*)",
       "Bash(mv:*)",
-      "Bash(docker exec:*)",
       "WebSearch",
       "WebSearch",
-      "WebSearch"
+      "WebSearch",
+      "Bash(docker logs:*)"
     ],
     "deny": []
   }
