@@ -1,6 +1,6 @@
 # Development Docker Compose
-# Only external dependencies: Ollama + ROS2
-# Run local Python from nimbus-ai/ directory
+# Backend services only - Gazebo runs natively in WSL2
+# ROS2 communication via host networking for WSL2 integration
 
 services:
   # Central ROS2 + RTAB-Map Container
@@ -11,16 +11,12 @@ services:
       - 11311:11311  # ROS Master
       - 9090:9090    # ROS Bridge WebSocket
     environment:
-      - ROS_DOMAIN_ID=0  
-      - DISPLAY=${DISPLAY}
+      - ROS_DOMAIN_ID=0
     networks:
       - nimbus-network
     volumes:
-      - /tmp/.X11-unix:/tmp/.X11-unix:rw
       - ./ros2-config:/ros2_ws/src/nimbus_config
     privileged: true
-    devices:
-      - /dev:/dev
     command: ["bash", "-c", "source /opt/ros/humble/setup.bash && apt update && apt install -y ros-humble-rosbridge-suite && ros2 run rosbridge_server rosbridge_websocket --ros-args -p port:=9090 & tail -f /dev/null"]
     stdin_open: true
     tty: true

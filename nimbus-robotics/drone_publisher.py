@@ -4,174 +4,85 @@ Drone Main Application
 Handles drone control, flight operations, video capture, and ROS2 publishing for the Nimbus system.
 """
 
-import os
-import logging
-import asyncio
-import threading
-import cv2
-from flask import Flask, jsonify, request
-from mavsdk import System
-from mavsdk.action import ActionError
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import String, Float32
-from sensor_msgs.msg import Image
-from cv_bridge import CvBridge
+import cv2
+import base64
+import websocket
+import json
+import time
 
-# Logging setup (outputs to terminal/console)
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+ROS2_WS_URL = "ws://localhost:9090"
+WIDTH = 640
+HEIGHT = 480
 
-# Flask app for receiving commands from web UI
-app = Flask(__name__)
-
-# Node for publishing to MR
-class DroneROSNode(Node):
-    def __init__(self, drone_system):
-        super().__init__('drone_main_node')
-        self.bridge = CvBridge()
-        self.drone_system = drone_system  # MAVSDK system for control
-        self.video_publisher = self.create_publisher(Image, '/drone/camera/image_raw', 10)
-        self.output_publisher = self.create_publisher(String, '/drone/outputs', 10)
-        self.cap = cv2.VideoCapture(0)  # Change to drone camera, e.g., 'rtsp://drone_ip:port/video'
+class DroneVideoPublisher(Node):
+    def __init__(self):
+        super().__init__('drone_video_publisher')
+        self.cap = cv2.VideoCapture(0)
         if not self.cap.isOpened():
-            self.publish_output('Error: Failed to open camera!')
-        # Timer for video publishing (~30 FPS)
-        self.video_timer = self.create_timer(0.033, self.publish_video)
-        self.get_logger().info('ROS2 node initialized for video and outputs')
+            self.get_logger().error('Failed to open camera!')
+            return
+        self.ws = websocket.WebSocketApp(
+            ROS2_WS_URL,
+            on_open=self.on_open,
+            on_message=self.on_message,
+            on_error=self.on_error,
+            on_close=self.on_close
+        )
+        self.running = True
+        self.ws_thread = self.ws.run_forever()
 
-    def publish_video(self):
-        ret, frame = self.cap.read()
-        if ret:
-            try:
-                img_msg = self.bridge.cv2_to_imgmsg(frame, encoding='bgr8')
-                self.video_publisher.publish(img_msg)
-            except Exception as e:
-                self.publish_output(f'Error publishing video: {str(e)}')
-        else:
-            self.publish_output('Warning: Failed to capture video frame')
+    def on_open(self, ws):
+        self.get_logger().info('WebSocket opened, starting video stream...')
 
-    def publish_output(self, message: str):
-        logger.info(message)  # Print to terminal
-        msg = String()
-        msg.data = message
-        self.output_publisher.publish(msg)
+    def on_message(self, ws, message):
+        pass  # Not needed for publisher
+
+    def on_error(self, ws, error):
+        self.get_logger().error(f'WebSocket error: {error}')
+
+    def on_close(self, ws, close_status_code, close_msg):
+        self.get_logger().info('WebSocket closed')
+        self.running = False
+
+    def run(self):
+        while self.running:
+            ret, frame = self.cap.read()
+            if ret:
+                # Resize and encode as JPEG
+                frame = cv2.resize(frame, (WIDTH, HEIGHT))
+                _, jpeg_buffer = cv2.imencode('.jpg', frame)
+                jpeg_bytes = jpeg_buffer.tobytes()
+                b64data = base64.b64encode(jpeg_bytes).decode('utf-8')
+
+                publish_msg = {
+                    "op": "publish",
+                    "topic": "/drone_video",
+                    "msg": {
+                        "header": {"stamp": {"sec": int(time.time()), "nanosec": 0}},
+                        "height": HEIGHT,
+                        "width": WIDTH,
+                        "encoding": "jpeg",
+                        "is_bigendian": 0,
+                        "step": 0,
+                        "data": b64data
+                    }
+                }
+                self.ws.send(json.dumps(publish_msg))
+            time.sleep(0.033)  # ~30 FPS
 
     def destroy_node(self):
         self.cap.release()
+        self.ws.close()
         super().destroy_node()
 
-# MAVSDK async functions for drone control
-async def connect_drone():
-    drone = System()
-    await drone.connect(system_address=os.environ.get('DRONE_ADDRESS', 'udp://:14540'))  # Env var for flexibility
-    async for state in drone.core.connection_state():
-        if state.is_connected:
-            logger.info("Connected to drone!")
-            return drone
-    raise Exception("Failed to connect to drone")
-
-async def arm_drone(drone):
-    try:
-        await drone.action.arm()
-        logger.info("Drone armed")
-    except ActionError as e:
-        logger.error(f"Arming failed: {e}")
-
-async def takeoff_drone(drone, altitude: float):
-    await arm_drone(drone)
-    try:
-        await drone.action.set_takeoff_altitude(altitude)
-        await drone.action.takeoff()
-        logger.info(f"Lifting off to {altitude}m")
-    except ActionError as e:
-        logger.error(f"Takeoff failed: {e}")
-
-async def land_drone(drone):
-    try:
-        await drone.action.land()
-        logger.info("Landing initiated")
-    except ActionError as e:
-        logger.error(f"Landing failed: {e}")
-
-async def navigate_drone(drone, target_pose: dict):
-    # Assuming target_pose has 'latitude', 'longitude', 'altitude', 'heading' (adapt as needed)
-    try:
-        lat = target_pose.get('latitude', 0.0)
-        lon = target_pose.get('longitude', 0.0)
-        alt = target_pose.get('altitude', 10.0)
-        heading = target_pose.get('heading', 0.0)
-        await drone.action.goto_location(lat, lon, alt, heading)
-        logger.info(f"Navigating to pose: {target_pose}")
-    except ActionError as e:
-        logger.error(f"Navigation failed: {e}")
-
-# Flask endpoints to receive commands from web UI (and trigger MAVSDK + publish outputs)
-@app.route('/health', methods=['GET'])
-def health_check():
-    return jsonify({'status': 'healthy', 'service': 'nimbus-drone'})
-
-@app.route('/drone/status', methods=['GET'])
-def drone_status():
-    return jsonify({
-        'service': 'Drone/Robotics',
-        'status': 'running',
-        'features': ['Flight Control', 'Navigation', 'Hardware Interface']
-    })
-
-@app.route('/drone/takeoff', methods=['POST'])
-def takeoff():
-    data = request.get_json() or {}
-    altitude = data.get('altitude', 2.0)
-    ros_node.publish_output(f"Takeoff command received - altitude: {altitude}m")
-    asyncio.run(takeoff_drone(ros_node.drone_system, altitude))
-    return jsonify({
-        'status': 'success',
-        'message': f'Takeoff initiated to {altitude}m',
-        'altitude': altitude
-    })
-
-@app.route('/drone/land', methods=['POST'])
-def land():
-    ros_node.publish_output("Land command received")
-    asyncio.run(land_drone(ros_node.drone_system))
-    return jsonify({
-        'status': 'success',
-        'message': 'Landing sequence initiated'
-    })
-
-@app.route('/drone/navigate', methods=['POST'])
-def navigate():
-    data = request.get_json() or {}
-    target_pose = data.get('target_pose', {})
-    ros_node.publish_output(f"Navigation command: {target_pose}")
-    asyncio.run(navigate_drone(ros_node.drone_system, target_pose))
-    return jsonify({
-        'status': 'success',
-        'message': 'Navigation started',
-        'target': target_pose
-    })
-
-# Main function to start everything
-def main():
-    global ros_node
-    # Start
-    rclpy.init()
-    # Connect to drone
-    loop = asyncio.get_event_loop()
-    drone_system = loop.run_until_complete(connect_drone())
-    # Create ROS2 node with drone system
-    ros_node = DroneROSNode(drone_system)
-    # Run Flask in a separate thread (non-blocking)
-    flask_thread = threading.Thread(target=app.run, kwargs={'host': '0.0.0.0', 'port': int(os.environ.get('PORT', 5004)), 'debug': False})
-    flask_thread.start()
-    # Spin ROS2 node
-    try:
-        rclpy.spin(ros_node)
-    finally:
-        ros_node.destroy_node()
-        rclpy.shutdown()
+def main(args=None):
+    rclpy.init(args=args)
+    publisher = DroneVideoPublisher()
+    publisher.run()
+    publisher.destroy_node()
+    rclpy.shutdown()
 
 if __name__ == '__main__':
     main()
-
