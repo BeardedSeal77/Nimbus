@@ -1,6 +1,6 @@
-# Development Docker Compose
-# Backend services only - Gazebo runs natively in WSL2
-# ROS2 communication via host networking for WSL2 integration
+# Server Docker Compose (192.168.8.101)
+# Use this when moving ROS2 + Ollama to server
+# Run with: docker-compose -f docker-compose.server.yml up -d
 
 services:
   # Central ROS2 + RTAB-Map Container
@@ -9,20 +9,17 @@ services:
     container_name: ros2-central
     ports:
       - "9090:9090"    # Rosbridge WebSocket
-      - "7400:7400"    # DDS discovery
-      - "7401:7401"    # DDS data
     networks:
       ros2-network:
-        ipv4_address: 192.168.8.102
+        ipv4_address: 192.168.8.101
     environment:
       - ROS_DOMAIN_ID=0
+      - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
       - ROS_LOCALHOST_ONLY=0
-      - ROS2_HOSTNAME=192.168.8.102
-      - ROS_AUTOMATIC_DISCOVERY_RANGE=SUBNET
-      - ROS_STATIC_PEERS=192.168.8.102
+      - CYCLONEDX_URI=file:///ros2_ws/cyclonedx.xml
     volumes:
       - ./ros2-config:/ros2_ws/src/nimbus_config
-      - ./docker/cyclonedx.xml:/ros2_ws/cyclonedx.xml
+      - ./docker/cyclonedx-server.xml:/ros2_ws/cyclonedx.xml
     privileged: true
     command: ["bash", "-c", "source /opt/ros/jazzy/setup.bash && apt update && apt install -y ros-jazzy-rosbridge-suite ros-jazzy-rmw-cyclonedds-cpp && ros2 run rosbridge_server rosbridge_websocket --ros-args -p port:=9090 & tail -f /dev/null"]
     stdin_open: true
@@ -38,7 +35,7 @@ services:
       - ollama:/root/.ollama
     networks:
       ros2-network:
-        ipv4_address: 192.168.8.104
+        ipv4_address: 192.168.8.105
     deploy:
       resources:
         reservations:
