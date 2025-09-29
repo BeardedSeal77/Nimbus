@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<CycloneDX xmlns="https://raw.githubusercontent.com/eclipse-cyclonedx/cyclonedx/iceoryx/etc/cyclonedx.xsd" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="https://raw.githubusercontent.com/eclipse-cyclonedx/cyclonedx/iceoryx/etc/cyclonedx.xsd">
+    <Domain id="any">
+        <General>
+            <NetworkInterfaceAddress>192.168.8.102</NetworkInterfaceAddress>
+            <AllowMulticast>true</AllowMulticast>
+        </General>
+        <Discovery>
+            <Peers>
+                <Peer address="192.168.8.102"/>  <!-- Docker ROS2 on PC -->
+                <Peer address="192.168.8.101"/>  <!-- Future: Server -->
+            </Peers>
+        </Discovery>
+    </Domain>
+</CycloneDX>
