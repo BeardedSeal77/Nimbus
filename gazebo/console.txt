@@ -1,0 +1,95 @@
+edcul@ED-Desktop:~$ gz sim ~/gazebo-worlds/blender_scene_world.sdf --verbose
+[Msg] Gazebo Sim GUI    v8.9.0
+[Msg] Received world [/home/edcul/gazebo-worlds/blender_scene_world.sdf] from the GUI.
+[Msg] Gazebo Sim Server v8.9.0
+[Msg] Loading SDF world file[/home/edcul/gazebo-worlds/blender_scene_world.sdf].
+[Msg] Serving entity system service on [/entity/system/add]
+[Msg] Loaded level [default]
+[Msg] No systems loaded from SDF, loading defaults
+[Msg] Create service on [/world/blender_scene_world/create]
+[Msg] Remove service on [/world/blender_scene_world/remove]
+[Msg] Pose service on [/world/blender_scene_world/set_pose]
+[Msg] Pose service on [/world/blender_scene_world/set_pose_vector]
+[Msg] Light configuration service on [/world/blender_scene_world/light_config]
+[Msg] Physics service on [/world/blender_scene_world/set_physics]
+[Msg] SphericalCoordinates service on [/world/blender_scene_world/set_spherical_coordinates]
+[Msg] Enable collision service on [/world/blender_scene_world/enable_collision]
+[Msg] Disable collision service on [/world/blender_scene_world/disable_collision]
+[Msg] Material service on [/world/blender_scene_world/visual_config]
+[Msg] Material service on [/world/blender_scene_world/wheel_slip]
+[Msg] Serving world controls on [/world/blender_scene_world/control], [/world/blender_scene_world/control/state] and [/world/blender_scene_world/playback/control]
+[Msg] Serving GUI information on [/world/blender_scene_world/gui/info]
+[Msg] World [blender_scene_world] initialized with [default] physics profile.
+[Msg] Serving world SDF generation service on [/world/blender_scene_world/generate_world_sdf]
+[Msg] Serving world names on [/gazebo/worlds]
+[Msg] Resource path add service on [/gazebo/resource_paths/add].
+[Msg] Resource path get service on [/gazebo/resource_paths/get].
+[Msg] Resource path resolve service on [/gazebo/resource_paths/resolve].
+[Msg] Resource paths published on [/gazebo/resource_paths].
+[Msg] Server control service on [/server_control].
+[GUI] [Msg] Loading config [/home/edcul/.gz/sim/8/gui.config]
+[GUI] [Msg] Added plugin [3D View] to main window
+[GUI] [Msg] Loaded plugin [MinimalScene] from path [/usr/lib/x86_64-linux-gnu/gz-gui-8/plugins/libMinimalScene.so]
+[GUI] [Msg] Currently tracking topic on [/gui/currently_tracked]
+[GUI] [Msg] Added plugin [Entity Context Menu] to main window
+[GUI] [Msg] Loaded plugin [EntityContextMenuPlugin] from path [/usr/lib/x86_64-linux-gnu/gz-sim-8/plugins/gui/libEntityContextMenuPlugin.so]
+[GUI] [Msg] Added plugin [Scene Manager] to main window
+[GUI] [Msg] Loaded plugin [GzSceneManager] from path [/usr/lib/x86_64-linux-gnu/gz-sim-8/plugins/gui/libGzSceneManager.so]
+[GUI] [Msg] Camera view controller topic advertised on [/gui/camera/view_control]
+[GUI] [Msg] Camera reference visual topic advertised on [/gui/camera/view_control/reference_visual]
+[GUI] [Msg] Camera view control sensitivity advertised on [/gui/camera/view_control/sensitivity]
+[GUI] [Msg] Added plugin [Interactive view control] to main window
+[GUI] [Msg] Loaded plugin [InteractiveViewControl] from path [/usr/lib/x86_64-linux-gnu/gz-gui-8/plugins/libInteractiveViewControl.so]
+[GUI] [Msg] Added plugin [Camera tracking] to main window
+[GUI] [Msg] Loaded plugin [CameraTracking] from path [/usr/lib/x86_64-linux-gnu/gz-gui-8/plugins/libCameraTracking.so]
+[GUI] [Msg] Listening to stats on [/world/blender_scene_world/stats]
+[GUI] [Msg] Added plugin [Marker Manager] to main window
+[GUI] [Msg] Loaded plugin [MarkerManager] from path [/usr/lib/x86_64-linux-gnu/gz-gui-8/plugins/libMarkerManager.so]
+[GUI] [Msg] Added plugin [Select entities] to main window
+[GUI] [Msg] Loaded plugin [SelectEntities] from path [/usr/lib/x86_64-linux-gnu/gz-sim-8/plugins/gui/libSelectEntities.so]
+[GUI] [Msg] Added plugin [Spawn] to main window
+[GUI] [Msg] Loaded plugin [Spawn] from path [/usr/lib/x86_64-linux-gnu/gz-sim-8/plugins/gui/libSpawn.so]
+[GUI] [Msg] View as transparent service on [/gui/view/transparent]
+[GUI] [Msg] View as wireframes service on [/gui/view/wireframes]
+[GUI] [Msg] View center of mass service on [/gui/view/com]
+[GUI] [Msg] View inertia service on [/gui/view/inertia]
+[GUI] [Msg] View collisions service on [/gui/view/collisions]
+[GUI] [Msg] View joints service on [/gui/view/joints]
+[GUI] [Msg] View frames service on [/gui/view/frames]
+[GUI] [Msg] Added plugin [Visualization capabilities] to main window
+[GUI] [Msg] Loaded plugin [VisualizationCapabilities] from path [/usr/lib/x86_64-linux-gnu/gz-sim-8/plugins/gui/libVisualizationCapabilities.so]
+[GUI] [Msg] Using world control service [/world/blender_scene_world/control]
+[GUI] [Msg] Listening to stats on [/world/blender_scene_world/stats]
+[GUI] [Msg] Added plugin [World control] to main window
+[GUI] [Msg] Loaded plugin [WorldControl] from path [/usr/lib/x86_64-linux-gnu/gz-gui-8/plugins/libWorldControl.so]
+[GUI] [Msg] Listening to stats on [/world/blender_scene_world/stats]
+[GUI] [Msg] Added plugin [World stats] to main window
+[GUI] [Msg] Loaded plugin [WorldStats] from path [/usr/lib/x86_64-linux-gnu/gz-gui-8/plugins/libWorldStats.so]
+[GUI] [Msg] Added plugin [Shapes] to main window
+[GUI] [Msg] Loaded plugin [Shapes] from path [/usr/lib/x86_64-linux-gnu/gz-sim-8/plugins/gui/libShapes.so]
+[GUI] [Msg] Added plugin [Lights] to main window
+[GUI] [Msg] Loaded plugin [Lights] from path [/usr/lib/x86_64-linux-gnu/gz-sim-8/plugins/gui/libLights.so]
+[GUI] [Msg] Added plugin [Transform control] to main window
+[GUI] [Msg] Loaded plugin [TransformControl] from path [/usr/lib/x86_64-linux-gnu/gz-sim-8/plugins/gui/libTransformControl.so]
+[GUI] [Msg] Screenshot service on [/gui/screenshot]
+[GUI] [Msg] Added plugin [Screenshot] to main window
+[GUI] [Msg] Loaded plugin [Screenshot] from path [/usr/lib/x86_64-linux-gnu/gz-gui-8/plugins/libScreenshot.so]
+[GUI] [Msg] Added plugin [Copy/Paste] to main window
+[GUI] [Msg] Loaded plugin [CopyPaste] from path [/usr/lib/x86_64-linux-gnu/gz-sim-8/plugins/gui/libCopyPaste.so]
+[GUI] [Msg] Added plugin [Component inspector] to main window
+[GUI] [Msg] Loaded plugin [ComponentInspector] from path [/usr/lib/x86_64-linux-gnu/gz-sim-8/plugins/gui/libComponentInspector.so]
+[GUI] [Msg] Currently tracking topic on [/gui/currently_tracked]
+[GUI] [Msg] Added plugin [Entity tree] to main window
+[GUI] [Msg] Loaded plugin [EntityTree] from path [/usr/lib/x86_64-linux-gnu/gz-sim-8/plugins/gui/libEntityTree.so]
+[GUI] [Msg] Using server control service [/server_control]
+[Msg] Found no publishers on /stats, adding root stats topic
+[Msg] Found no publishers on /clock, adding root clock topic
+[Msg] Serving scene information on [/world/blender_scene_world/scene/info]
+[Msg] Serving graph information on [/world/blender_scene_world/scene/graph]
+[Msg] Serving full state on [/world/blender_scene_world/state]
+[Msg] Serving full state (async) on [/world/blender_scene_world/state_async]
+[Msg] Publishing scene information on [/world/blender_scene_world/scene/info]
+[Msg] Publishing entity deletions on [/world/blender_scene_world/scene/deletion]
+[Msg] Publishing state changes on [/world/blender_scene_world/state]
+[Msg] Publishing pose messages on [/world/blender_scene_world/pose/info]
+[Msg] Publishing dynamic pose messages on [/world/blender_scene_world/dynamic_pose/info]

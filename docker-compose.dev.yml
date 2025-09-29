@@ -5,19 +5,20 @@
 services:
   # Central ROS2 + RTAB-Map Container
   ros2-central:
-    image: introlab3it/rtabmap_ros:humble
+    image: ros:jazzy
     container_name: ros2-central
     ports:
-      - 11311:11311  # ROS Master
-      - 9090:9090    # ROS Bridge WebSocket
-    environment:
-      - ROS_DOMAIN_ID=0
+      - "9090:9090"    # Expose rosbridge for Windows nimbus-ai
     networks:
       - nimbus-network
+    environment:
+      - ROS_DOMAIN_ID=0
+      - RMW_IMPLEMENTATION=rmw_cyclonedx_cpp
+      - ROS_LOCALHOST_ONLY=0
     volumes:
       - ./ros2-config:/ros2_ws/src/nimbus_config
     privileged: true
-    command: ["bash", "-c", "source /opt/ros/humble/setup.bash && apt update && apt install -y ros-humble-rosbridge-suite && ros2 run rosbridge_server rosbridge_websocket --ros-args -p port:=9090 & tail -f /dev/null"]
+    command: ["bash", "-c", "source /opt/ros/jazzy/setup.bash && apt update && apt install -y ros-jazzy-rosbridge-suite ros-jazzy-rmw-cyclonedds-cpp && ros2 run rosbridge_server rosbridge_websocket --ros-args -p port:=9090 & tail -f /dev/null"]
     stdin_open: true
     tty: true
 
@@ -42,6 +43,11 @@ services:
 networks:
   nimbus-network:
     driver: bridge
+  wsl2-bridge:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 192.168.100.0/24  # Predictable subnet for WSL2 access
 
 volumes:
   ollama:
