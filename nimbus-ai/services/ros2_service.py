@@ -142,11 +142,7 @@ class ROS2Service:
     
     def _setup_subscriptions(self):
         """Subscribe to ROS2 camera topic"""
-        # Use simulation topics if in simulation mode
-        if self.app and self.app.config.get('SIMULATION_MODE', False):
-            camera_topic = "/tello/camera/image_raw"
-        else:
-            camera_topic = "/camera/image_raw"
+        camera_topic = "/camera/image_raw"
 
         subscribe_msg = {
             "op": "subscribe",
@@ -202,22 +198,41 @@ class ROS2Service:
             height = image_msg.get('height', 0)
             encoding = image_msg.get('encoding', '')
             data = image_msg.get('data', '')
-            
-            if not data:
+
+            if not data or not width or not height:
                 return None
-            
+
             # Decode base64 data
             image_data = base64.b64decode(data)
-            
+
             if encoding == 'jpeg':
                 # Decode JPEG
                 nparr = np.frombuffer(image_data, np.uint8)
                 frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
                 return frame
+            elif encoding == 'bgra8':
+                # Decode BGRA raw data
+                nparr = np.frombuffer(image_data, dtype=np.uint8)
+                frame = np.ascontiguousarray(nparr.reshape((height, width, 4)))
+                # Convert BGRA to BGR for OpenCV
+                frame = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
+                return frame
+            elif encoding == 'rgb8':
+                # Decode RGB raw data
+                nparr = np.frombuffer(image_data, dtype=np.uint8)
+                frame = np.ascontiguousarray(nparr.reshape((height, width, 3)))
+                # Convert RGB to BGR for OpenCV
+                frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+                return frame
+            elif encoding == 'bgr8':
+                # Decode BGR raw data
+                nparr = np.frombuffer(image_data, dtype=np.uint8)
+                frame = np.ascontiguousarray(nparr.reshape((height, width, 3)))
+                return frame
             else:
-                logger.debug(f"Unsupported encoding: {encoding}")
+                logger.warning(f"Unsupported encoding: {encoding}")
                 return None
-                
+
         except Exception as e:
             logger.error(f"Error decoding ROS image: {e}")
             return None

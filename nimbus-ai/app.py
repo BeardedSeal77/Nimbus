@@ -28,7 +28,7 @@ app.config.update({
     'ACTIVATION_PHRASES': ["ok drone", "hey nimbus", "drone activate"],
     
     # Object Detection Configuration
-    'GLOBAL_OBJECT': "chair",
+    'GLOBAL_OBJECT': "car",
     'GLOBAL_INTENT': "",
     'GLOBAL_GET_DIST': 1,
     'GLOBAL_TARGET_DISTANCE': 0.0,
@@ -43,11 +43,14 @@ app.config.update({
     'OBJECT_DETECTION_BUSY': False,
     'DEPTH_PROCESSING_BUSY': False,
     
+    # Video Source Configuration
+    'USE_ROS2_VIDEO': False,  # Toggle: True = ROS2, False = Direct HTTP
+
     # ROS2 Configuration
     'ROS2_HOST': 'localhost',  # Docker exposes port 9090 to Windows
     'ROS2_PORT': 9090,
     'SIMULATION_MODE': True,  # Use simulation topics
-    
+
     # Service Status
     'AI_SERVICE_RUNNING': False,
     'ROS2_SERVICE_RUNNING': False,
@@ -71,13 +74,14 @@ except ImportError as e:
 
 # Import services
 try:
-    from services import ai_service, ros2_service, display_service
-    
+    from services import ai_service, ros2_service, display_service, video_stream_service
+
     # Store service references in app context
     app.ai_service = ai_service
     app.ros2_service = ros2_service
+    app.video_stream_service = video_stream_service
     app.display_service = display_service
-    
+
     logger.info("Services imported successfully")
 except ImportError as e:
     logger.error(f"Failed to import services: {e}")
@@ -85,23 +89,29 @@ except ImportError as e:
 def start_background_services():
     """Start all background services"""
     logger.info("Starting background services...")
-    
+    logger.info(f"Video source: {'ROS2' if app.config['USE_ROS2_VIDEO'] else 'Direct HTTP'}")
+
     try:
         # Start AI processing service
         if hasattr(app, 'ai_service'):
             app.ai_service.start_service(app)
             logger.info("AI service started")
-        
-        # Start ROS2 connection service
-        if hasattr(app, 'ros2_service'):
-            app.ros2_service.start_service(app)
-            logger.info("ROS2 service started")
-        
+
+        # Start video service (conditional based on USE_ROS2_VIDEO)
+        if app.config['USE_ROS2_VIDEO']:
+            if hasattr(app, 'ros2_service'):
+                app.ros2_service.start_service(app)
+                logger.info("ROS2 service started")
+        else:
+            if hasattr(app, 'video_stream_service'):
+                app.video_stream_service.start_service(app, stream_url='http://localhost:8080/video')
+                logger.info("Video stream service started (MJPEG from Webots)")
+
         # Start display service
         if hasattr(app, 'display_service'):
             app.display_service.start_service(app)
             logger.info("Display service started")
-            
+
     except Exception as e:
         logger.error(f"Error starting background services: {e}")
 

@@ -155,8 +155,8 @@ class ProcessedDisplay:
             status_display = "Object Detected + Distance Calculated!"
             status_color = self.colors['slam_good']
         elif processing_status == 'collecting_depth_frames':
-            frames_collected = ai_result.get('depth_frames_collected', 0)
-            frames_needed = ai_result.get('depth_frames_needed', 5)
+            frames_collected = ai_result.get('depth_frames_collected') or 0
+            frames_needed = ai_result.get('depth_frames_needed') or 5
             status_display = f"Collecting Depth Frames ({frames_collected}/{frames_needed})"
             status_color = self.colors['slam_processing']
         elif processing_status == 'object_detected_depth_busy':
@@ -218,8 +218,8 @@ class ProcessedDisplay:
         # Show frame collection progress if collecting
         processing_status = ai_result.get('processing_status', '')
         if processing_status == 'collecting_depth_frames':
-            frames_collected = ai_result.get('depth_frames_collected', 0)
-            frames_needed = ai_result.get('depth_frames_needed', 5)
+            frames_collected = ai_result.get('depth_frames_collected') or 0
+            frames_needed = ai_result.get('depth_frames_needed') or 5
             progress = frames_collected / frames_needed if frames_needed > 0 else 0
             
             # Progress bar
