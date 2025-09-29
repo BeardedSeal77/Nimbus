@@ -199,7 +199,63 @@
 <body>
     <div class="container">
         <h1>🤖 Nimbus AI Control Panel</h1>
-        
+
+        <!-- Live Drone State -->
+        <div class="control-section" id="drone-stats">
+            <h2>🚁 Live Drone State</h2>
+            <div class="status-display">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                    <div>
+                        <strong>📍 Position:</strong><br>
+                        X: <span id="pos-x">0.00</span>m<br>
+                        Y: <span id="pos-y">0.00</span>m<br>
+                        Z: <span id="pos-z">0.00</span>m
+                    </div>
+                    <div>
+                        <strong>🧭 Orientation:</strong><br>
+                        Roll: <span id="ori-roll">0.00</span>rad<br>
+                        Pitch: <span id="ori-pitch">0.00</span>rad<br>
+                        Yaw: <span id="ori-yaw">0.00</span>rad
+                    </div>
+                    <div>
+                        <strong>💨 Velocity:</strong><br>
+                        X: <span id="vel-x">0.00</span>m/s<br>
+                        Y: <span id="vel-y">0.00</span>m/s<br>
+                        Z: <span id="vel-z">0.00</span>m/s
+                    </div>
+                    <div>
+                        <strong>⚡ Acceleration:</strong><br>
+                        X: <span id="accel-x">0.00</span>m/s²<br>
+                        Y: <span id="accel-y">0.00</span>m/s²<br>
+                        Z: <span id="accel-z">0.00</span>m/s²
+                    </div>
+                    <div>
+                        <strong>🔄 Angular Velocity:</strong><br>
+                        Roll: <span id="ang-roll">0.00</span>rad/s<br>
+                        Pitch: <span id="ang-pitch">0.00</span>rad/s<br>
+                        Yaw: <span id="ang-yaw">0.00</span>rad/s
+                    </div>
+                    <div>
+                        <strong>🎯 Facing Vector:</strong><br>
+                        X: <span id="facing-x">1.00</span><br>
+                        Y: <span id="facing-y">0.00</span><br>
+                        Z: <span id="facing-z">0.00</span>
+                    </div>
+                    <div>
+                        <strong>✈️ Flight Info:</strong><br>
+                        Mode: <span id="flight-mode">UNKNOWN</span><br>
+                        Target Alt: <span id="target-alt">0.00</span>m<br>
+                        Home Dist: <span id="home-dist">0.00</span>m
+                    </div>
+                    <div>
+                        <strong>🔗 Connection:</strong><br>
+                        Status: <span id="conn-status" class="status-indicator status-inactive"></span>
+                        <span id="conn-text">Disconnected</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Depth Detection Control -->
         <div class="control-section">
             <h2>📏 Depth Detection Control</h2>
@@ -338,12 +394,80 @@
     </div>
 
     <script>
+        // Server-Sent Events for live drone state
+        let droneStateSource = null;
+
+        function connectDroneState() {
+            droneStateSource = new EventSource('/drone_state_stream');
+
+            droneStateSource.onmessage = function(event) {
+                const state = JSON.parse(event.data);
+                updateDroneDisplay(state);
+            };
+
+            droneStateSource.onerror = function(error) {
+                console.error('Drone state SSE error:', error);
+                droneStateSource.close();
+                // Retry connection after 5 seconds
+                setTimeout(connectDroneState, 5000);
+            };
+        }
+
+        function updateDroneDisplay(state) {
+            // Position
+            document.getElementById('pos-x').textContent = state.position.x.toFixed(2);
+            document.getElementById('pos-y').textContent = state.position.y.toFixed(2);
+            document.getElementById('pos-z').textContent = state.position.z.toFixed(2);
+
+            // Orientation
+            document.getElementById('ori-roll').textContent = state.orientation.roll.toFixed(3);
+            document.getElementById('ori-pitch').textContent = state.orientation.pitch.toFixed(3);
+            document.getElementById('ori-yaw').textContent = state.orientation.yaw.toFixed(3);
+
+            // Velocity
+            document.getElementById('vel-x').textContent = state.velocity.x.toFixed(2);
+            document.getElementById('vel-y').textContent = state.velocity.y.toFixed(2);
+            document.getElementById('vel-z').textContent = state.velocity.z.toFixed(2);
+
+            // Acceleration
+            document.getElementById('accel-x').textContent = state.acceleration.x.toFixed(2);
+            document.getElementById('accel-y').textContent = state.acceleration.y.toFixed(2);
+            document.getElementById('accel-z').textContent = state.acceleration.z.toFixed(2);
+
+            // Angular velocity
+            document.getElementById('ang-roll').textContent = state.angular_velocity.roll.toFixed(3);
+            document.getElementById('ang-pitch').textContent = state.angular_velocity.pitch.toFixed(3);
+            document.getElementById('ang-yaw').textContent = state.angular_velocity.yaw.toFixed(3);
+
+            // Facing vector
+            document.getElementById('facing-x').textContent = state.facing_vector.x.toFixed(2);
+            document.getElementById('facing-y').textContent = state.facing_vector.y.toFixed(2);
+            document.getElementById('facing-z').textContent = state.facing_vector.z.toFixed(2);
+
+            // Flight info
+            document.getElementById('flight-mode').textContent = state.mode;
+            document.getElementById('target-alt').textContent = state.target_altitude.toFixed(2);
+            document.getElementById('home-dist').textContent = state.distance_to_home.toFixed(2);
+
+            // Connection status
+            const connStatus = document.getElementById('conn-status');
+            const connText = document.getElementById('conn-text');
+            if (state.connected) {
+                connStatus.className = 'status-indicator status-active';
+                connText.textContent = 'Connected';
+            } else {
+                connStatus.className = 'status-indicator status-inactive';
+                connText.textContent = 'Disconnected';
+            }
+        }
+
         // Auto-refresh status every 2 seconds
         setInterval(refreshStatus, 2000);
-        
-        // Load status on page load
+
+        // Load status on page load and connect to drone state stream
         window.onload = function() {
             refreshStatus();
+            connectDroneState();
         };
         
         async function makeRequest(url, method = 'GET', data = null) {

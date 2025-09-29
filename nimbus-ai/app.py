@@ -74,12 +74,13 @@ except ImportError as e:
 
 # Import services
 try:
-    from services import ai_service, ros2_service, display_service, video_stream_service
+    from services import ai_service, ros2_service, display_service, video_stream_service, drone_state_service
 
     # Store service references in app context
     app.ai_service = ai_service
     app.ros2_service = ros2_service
     app.video_stream_service = video_stream_service
+    app.drone_state_service = drone_state_service
     app.display_service = display_service
 
     logger.info("Services imported successfully")
@@ -106,6 +107,11 @@ def start_background_services():
             if hasattr(app, 'video_stream_service'):
                 app.video_stream_service.start_service(app, stream_url='http://localhost:8080/video')
                 logger.info("Video stream service started (MJPEG from Webots)")
+
+        # Start drone state service (always runs - subscribes to ROS2 drone topics)
+        if hasattr(app, 'drone_state_service'):
+            app.drone_state_service.start_service(app)
+            logger.info("Drone state service started")
 
         # Start display service
         if hasattr(app, 'display_service'):
