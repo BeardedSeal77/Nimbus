@@ -44,8 +44,9 @@ app.config.update({
     'DEPTH_PROCESSING_BUSY': False,
     
     # ROS2 Configuration
-    'ROS2_HOST': 'localhost',
+    'ROS2_HOST': 'localhost',  # Docker exposes port 9090 to Windows
     'ROS2_PORT': 9090,
+    'SIMULATION_MODE': True,  # Use simulation topics
     
     # Service Status
     'AI_SERVICE_RUNNING': False,

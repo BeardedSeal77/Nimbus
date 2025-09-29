@@ -56,14 +56,30 @@ class ROS2Service:
         logger.info("ROS2 service stopped")
     
     def _connection_loop(self):
-        """Main connection loop with reconnection logic"""
-        while self.running:
+        """Main connection loop with limited reconnection logic"""
+        retry_count = 0
+        max_retries = 3
+
+        while self.running and retry_count < max_retries:
             try:
                 if not self.ws_connected:
                     self._connect_to_ros2()
-                time.sleep(1)  # Check connection every second
+                    if not self.ws_connected:
+                        retry_count += 1
+                        if retry_count >= max_retries:
+                            logger.error(f"Failed to connect after {max_retries} attempts. Stopping.")
+                            self.running = False
+                            break
+                        time.sleep(5)  # Wait before retry
+                else:
+                    time.sleep(1)  # Check connection every second
             except Exception as e:
                 logger.error(f"ROS2 connection loop error: {e}")
+                retry_count += 1
+                if retry_count >= max_retries:
+                    logger.error(f"Failed to connect after {max_retries} attempts. Stopping.")
+                    self.running = False
+                    break
                 time.sleep(5)  # Wait before retry
     
     def _connect_to_ros2(self):
@@ -105,7 +121,8 @@ class ROS2Service:
             msg = json.loads(message)
             
             # Handle camera image messages
-            if msg.get('topic') == '/camera/image_raw':
+            topic = msg.get('topic', '')
+            if topic in ['/camera/image_raw', '/tello/camera/image_raw']:
                 self._handle_camera_frame(msg)
             
         except json.JSONDecodeError:
@@ -125,13 +142,19 @@ class ROS2Service:
     
     def _setup_subscriptions(self):
         """Subscribe to ROS2 camera topic"""
+        # Use simulation topics if in simulation mode
+        if self.app and self.app.config.get('SIMULATION_MODE', False):
+            camera_topic = "/tello/camera/image_raw"
+        else:
+            camera_topic = "/camera/image_raw"
+
         subscribe_msg = {
             "op": "subscribe",
-            "topic": "/camera/image_raw",
+            "topic": camera_topic,
             "type": "sensor_msgs/Image"
         }
         self._send_ros_message(subscribe_msg)
-        logger.info("Subscribed to /camera/image_raw")
+        logger.info(f"Subscribed to {camera_topic}")
     
     def _send_ros_message(self, message):
         """Send message to ROS2 via websocket"""

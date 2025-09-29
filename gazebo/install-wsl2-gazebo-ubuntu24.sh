@@ -71,13 +71,17 @@ echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/pkgs-
 echo "Updating package lists..."
 sudo apt update
 
-# Install minimal ROS2 for bridge only
-echo "Installing minimal ROS2 (just for bridge)..."
+# Install ROS2 Jazzy (Ubuntu 24.04 official + Gazebo Harmonic support)
+echo "Installing ROS2 Jazzy (Ubuntu 24.04 official + Gazebo Harmonic support)..."
 sudo apt install -y \
     ros-jazzy-ros-core \
     ros-jazzy-geometry-msgs \
     ros-jazzy-sensor-msgs \
     ros-jazzy-nav-msgs \
+    ros-jazzy-std-msgs \
+    ros-jazzy-ros-gz-bridge \
+    ros-jazzy-ros-gz-sim \
+    ros-jazzy-rmw-cyclonedds-cpp \
     python3-colcon-common-extensions \
     python3-rosdep
 
@@ -156,9 +160,48 @@ export ROS_DOMAIN_ID=0
 source /opt/ros/jazzy/setup.bash
 source ~/nimbus_ws/install/setup.bash
 
-# Start Gazebo Harmonic
+# Set up ROS2 discovery for Docker host networking communication
+export ROS_LOCALHOST_ONLY=0
+# Use CycloneDDS for better cross-network discovery
+export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+# With host networking, Docker uses the same network as WSL2
+export ROS_HOSTNAME=localhost
+
+# Copy world files to Gazebo directory
+echo "Setting up world files..."
+mkdir -p ~/.gazebo/models
+mkdir -p ~/.simulation-gazebo/worlds
+
+# Copy world files from project
+PROJECT_PATH="/mnt/c/Users/edcul/OneDrive/Documents/Work/Modules/Year 3/PRJ/Nimbus"
+if [ -f "$PROJECT_PATH/gazebo/gazebo-worlds/world.sdf" ]; then
+    cp "$PROJECT_PATH/gazebo/gazebo-worlds/world.sdf" ~/.simulation-gazebo/worlds/
+    cp "$PROJECT_PATH/gazebo/gazebo-worlds/world.dae" ~/.simulation-gazebo/worlds/
+    cp "$PROJECT_PATH/gazebo/gazebo-worlds/world.config" ~/.simulation-gazebo/worlds/ 2>/dev/null || true
+    cp "$PROJECT_PATH/gazebo/gazebo-models/dji-tello/Dji Tello.dae" ~/.simulation-gazebo/worlds/ 2>/dev/null || true
+    echo "World files and Tello model copied successfully"
+else
+    echo "World files not found, will start with empty world"
+fi
+
+# Start ROS2-Gazebo bridge in background
+echo "Starting ROS2-Gazebo bridge..."
+ros2 run ros_gz_bridge parameter_bridge \
+    /tello/cmd_vel@geometry_msgs/msg/Twist]gz.msgs.Twist \
+    /tello/odom@nav_msgs/msg/Odometry[gz.msgs.Odometry \
+    /tello/camera/image_raw@sensor_msgs/msg/Image[gz.msgs.Image &
+BRIDGE_PID=$!
+
+# Wait a moment for bridge to initialize
+sleep 2
+
+# Start Gazebo Harmonic with world
 echo "Starting Gazebo Harmonic..."
-gz sim &
+if [ -f ~/.simulation-gazebo/worlds/world.sdf ]; then
+    gz sim ~/.simulation-gazebo/worlds/world.sdf &
+else
+    gz sim &
+fi
 GAZEBO_PID=$!
 
 echo ""
@@ -171,7 +214,9 @@ echo ""
 # Wait for user input
 read -p "Press Enter to stop Gazebo..."
 kill $GAZEBO_PID 2>/dev/null || true
+kill $BRIDGE_PID 2>/dev/null || true
 pkill -f "gz sim" 2>/dev/null || true
+pkill -f "parameter_bridge" 2>/dev/null || true
 echo "Stopped."
 EOF
 
