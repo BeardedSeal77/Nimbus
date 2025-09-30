@@ -76,7 +76,7 @@ CONFIG = {
     'ROS2_PUBLISH_INTERVAL': 0.033,  # 30Hz
 
     # Nimbus Hub (Central Communication)
-    'HUB_URL': 'http://localhost:8000',
+    'HUB_URL': 'http://localhost:5000',
     'HUB_PUBLISH_INTERVAL': 0.01,  # 100Hz (10ms)
 
     # Camera
