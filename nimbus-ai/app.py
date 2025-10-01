@@ -1,167 +1,228 @@
 #!/usr/bin/env python3
 """
-Nimbus AI Main Application
-Flask-based web application with AI processing services
+Nimbus AI Worker Process
+Runs as child process spawned by nimbus-hub
+Performs AI/ML processing using shared state for communication
 """
 
 import os
 import sys
-import threading
+import time
 import logging
-from flask import Flask
+import traceback
+import threading
 
 # Add project paths
 project_root = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(project_root)
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - [AI WORKER] - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Create Flask app
-app = Flask(__name__)
+def run_ai_worker(shared_state):
+    """
+    Main AI worker function
+    Runs in separate process, communicates via shared_state
 
-# Global configuration and state variables
-app.config.update({
-    # AI Processing Configuration
-    'FRAME_PROCESSING_INTERVAL_MS': 100,
-    'ACTIVATION_PHRASES': ["ok drone", "hey nimbus", "drone activate"],
-    
-    # Object Detection Configuration
-    'GLOBAL_OBJECT': "chair",
-    'GLOBAL_INTENT': "",
-    'GLOBAL_GET_DIST': 1,
-    'GLOBAL_TARGET_DISTANCE': 0.0,
-    'GLOBAL_STATE_ACTIVE': False,
-    'GLOBAL_COMMAND_STATUS': "none",
-    
-    # Depth Detection Configuration
-    'DEPTH_FRAME_COUNT': 5,  # Movement frames (1-5)
-    'REFERENCE_FRAME_POSITION': 10,  # Which object detection gets reference frame
-    
-    # Processing Flags
-    'OBJECT_DETECTION_BUSY': False,
-    'DEPTH_PROCESSING_BUSY': False,
-    
-    # ROS2 Configuration
-    'ROS2_HOST': 'localhost',
-    'ROS2_PORT': 9090,
-    
-    # Service Status
-    'AI_SERVICE_RUNNING': False,
-    'ROS2_SERVICE_RUNNING': False,
-    'DISPLAY_SERVICE_RUNNING': False
-})
+    Args:
+        shared_state: multiprocessing.Manager().dict() for IPC
+    """
+    logger.info("=" * 60)
+    logger.info("NIMBUS AI WORKER PROCESS STARTING")
+    logger.info("=" * 60)
 
-# Thread lock for safe global state access
-app.config['STATE_LOCK'] = threading.Lock()
-
-# Import and register route blueprints
-try:
-    from routes.web_routes import web_bp
-    from routes.ai_routes import ai_bp
-    
-    app.register_blueprint(web_bp)
-    app.register_blueprint(ai_bp, url_prefix='/api')
-    
-    logger.info("Route blueprints registered successfully")
-except ImportError as e:
-    logger.error(f"Failed to import route blueprints: {e}")
-
-# Import services
-try:
-    from services import ai_service, ros2_service, display_service
-    
-    # Store service references in app context
-    app.ai_service = ai_service
-    app.ros2_service = ros2_service
-    app.display_service = display_service
-    
-    logger.info("Services imported successfully")
-except ImportError as e:
-    logger.error(f"Failed to import services: {e}")
-
-def start_background_services():
-    """Start all background services"""
-    logger.info("Starting background services...")
-    
     try:
-        # Start AI processing service
-        if hasattr(app, 'ai_service'):
-            app.ai_service.start_service(app)
+        # Import services
+        from services import ai_service, ros2_service, display_service, video_stream_service
+        from services.audio_service import AudioService
+
+        logger.info("Services imported successfully")
+
+        # Create pseudo-app config for services
+        class WorkerConfig:
+            """Config object that mimics Flask app.config"""
+            def __init__(self, shared_state):
+                self.shared_state = shared_state
+                self.config = {
+                    # AI Processing Configuration
+                    'FRAME_PROCESSING_INTERVAL_MS': 100,
+                    'ACTIVATION_PHRASES': ["ok drone", "hey nimbus", "drone activate"],
+
+                    # Object Detection Configuration (read from shared state)
+                    'GLOBAL_OBJECT': shared_state.get('target_object', 'car'),
+                    'GLOBAL_INTENT': shared_state.get('global_intent', ''),
+                    'GLOBAL_GET_DIST': shared_state.get('global_get_dist', 1),
+                    'GLOBAL_TARGET_DISTANCE': shared_state.get('global_target_distance', 0.0),
+                    'GLOBAL_STATE_ACTIVE': shared_state.get('global_state_active', False),
+                    'GLOBAL_COMMAND_STATUS': shared_state.get('global_command_status', 'none'),
+
+                    # Depth Detection Configuration
+                    'DEPTH_FRAME_COUNT': 5,
+                    'REFERENCE_FRAME_POSITION': 10,
+
+                    # Processing Flags
+                    'OBJECT_DETECTION_BUSY': False,
+                    'DEPTH_PROCESSING_BUSY': False,
+
+                    # Thread Safety
+                    'STATE_LOCK': threading.Lock(),
+
+                    # Video Source Configuration
+                    'USE_ROS2_VIDEO': False,  # Use direct HTTP
+
+                    # ROS2 Configuration
+                    'ROS2_HOST': 'localhost',
+                    'ROS2_PORT': 9090,
+                    'SIMULATION_MODE': True,
+
+                    # Service Status
+                    'AI_SERVICE_RUNNING': False,
+                    'ROS2_SERVICE_RUNNING': False,
+                    'DISPLAY_SERVICE_RUNNING': False
+                }
+
+            def get(self, key, default=None):
+                return self.config.get(key, default)
+
+            def __getitem__(self, key):
+                return self.config[key]
+
+            def __setitem__(self, key, value):
+                self.config[key] = value
+
+            def update(self, *args, **kwargs):
+                self.config.update(*args, **kwargs)
+
+        # Create worker config
+        worker_config = WorkerConfig(shared_state)
+
+        logger.info("Starting background services...")
+
+        # Start video stream service
+        if hasattr(video_stream_service, 'start_service'):
+            video_stream_service.start_service(worker_config, stream_url='http://localhost:8080/video')
+            logger.info("Video stream service started (MJPEG from Webots)")
+
+        # Start AI service
+        if hasattr(ai_service, 'start_service'):
+            ai_service.start_service(worker_config)
             logger.info("AI service started")
-        
-        # Start ROS2 connection service
-        if hasattr(app, 'ros2_service'):
-            app.ros2_service.start_service(app)
-            logger.info("ROS2 service started")
-        
+
         # Start display service
-        if hasattr(app, 'display_service'):
-            app.display_service.start_service(app)
+        if hasattr(display_service, 'start_service'):
+            display_service.start_service(worker_config)
             logger.info("Display service started")
-            
+
+        # Initialize audio service
+        audio_service_instance = AudioService()
+        audio_service_instance.initialize(worker_config)
+        logger.info("Audio service initialized")
+
+        logger.info("All services started successfully")
+        logger.info("Entering main processing loop...")
+
+        # Main processing loop
+        frame_count = 0
+        last_fps_time = time.time()
+
+        while shared_state.get('ai_running', True):
+            try:
+                # Update heartbeat
+                shared_state['last_heartbeat'] = time.time()
+
+                # Check for cancel signal
+                if shared_state.get('cancel', False):
+                    logger.info("Cancel signal received, pausing processing")
+                    shared_state['cancel'] = False
+                    time.sleep(0.5)
+                    continue
+
+                # Sync configuration from shared state
+                # Read from both 'global_object' (audio) and 'target_object' (web UI)
+                worker_config['GLOBAL_OBJECT'] = shared_state.get('global_object', shared_state.get('target_object', 'car'))
+                worker_config['GLOBAL_INTENT'] = shared_state.get('global_intent', '')
+                worker_config['GLOBAL_GET_DIST'] = shared_state.get('global_get_dist', 0)
+                worker_config['mode'] = shared_state.get('mode', 'MANUAL')
+
+                # Handle audio recording control
+                if shared_state.get('audio_recording', False) and not audio_service_instance.recording:
+                    audio_service_instance.start_recording()
+                elif not shared_state.get('audio_recording', False) and audio_service_instance.recording:
+                    pass
+
+                # Handle audio processing trigger
+                if shared_state.get('audio_process_trigger', False):
+                    shared_state['audio_process_trigger'] = False
+                    result = audio_service_instance.stop_recording()
+                    shared_state['audio_result'] = result
+
+                # Calculate FPS
+                frame_count += 1
+                if frame_count % 30 == 0:
+                    current_time = time.time()
+                    fps = 30.0 / (current_time - last_fps_time)
+                    shared_state['processing_fps'] = fps
+                    last_fps_time = current_time
+
+                # Get latest AI results if available
+                try:
+                    if hasattr(ai_service, 'get_latest_detection_result'):
+                        result = ai_service.get_latest_detection_result()
+                        if result:
+                            shared_state['ai_results'] = result
+                            if 'detections' in result:
+                                shared_state['detection_count'] = len(result['detections'])
+                except Exception as e:
+                    logger.debug(f"Error getting AI results: {e}")
+
+                # Get latest processed frame for video streaming
+                try:
+                    # Get PROCESSED display frame (with overlays, bounding boxes, etc.)
+                    if hasattr(display_service, 'display_service_instance'):
+                        display_inst = display_service.display_service_instance
+                        with display_inst.frame_lock:
+                            if display_inst.current_display_frame is not None:
+                                # Encode processed frame as JPEG for streaming
+                                import cv2
+                                ret, jpeg = cv2.imencode('.jpg', display_inst.current_display_frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+                                if ret:
+                                    shared_state['video_frame'] = jpeg.tobytes()
+                except Exception as e:
+                    logger.debug(f"Error encoding video frame: {e}")
+
+                # Small sleep to prevent CPU hammering
+                time.sleep(0.01)  # 100Hz loop
+
+            except KeyboardInterrupt:
+                logger.info("Worker interrupted by keyboard")
+                break
+            except Exception as e:
+                logger.error(f"Error in worker loop: {e}")
+                logger.error(traceback.format_exc())
+                time.sleep(1)  # Prevent runaway on persistent errors
+
+        logger.info("AI worker shutting down...")
+
+        # Stop services
+        try:
+            if hasattr(ai_service, 'stop_service'):
+                ai_service.stop_service()
+            if hasattr(display_service, 'stop_service'):
+                display_service.stop_service()
+            if hasattr(video_stream_service, 'stop_service'):
+                video_stream_service.stop_service()
+        except Exception as e:
+            logger.error(f"Error stopping services: {e}")
+
+        logger.info("AI worker process stopped")
+
     except Exception as e:
-        logger.error(f"Error starting background services: {e}")
-
-def stop_background_services():
-    """Stop all background services"""
-    logger.info("Stopping background services...")
-    
-    try:
-        if hasattr(app, 'ai_service'):
-            app.ai_service.stop_service()
-        
-        if hasattr(app, 'ros2_service'):
-            app.ros2_service.stop_service()
-        
-        if hasattr(app, 'display_service'):
-            app.display_service.stop_service()
-            
-    except Exception as e:
-        logger.error(f"Error stopping background services: {e}")
-
-def initialize_application():
-    """Initialize the application on startup"""
-    logger.info("Initializing Nimbus AI application...")
-    start_background_services()
-
-@app.teardown_appcontext
-def shutdown_application(exception):
-    """Clean shutdown of services"""
-    if exception:
-        logger.error(f"Application shutdown due to exception: {exception}")
-
-# Context processor to make config available in templates
-@app.context_processor
-def inject_config():
-    return dict(config=app.config)
+        logger.error(f"Fatal error in AI worker: {e}")
+        logger.error(traceback.format_exc())
+        shared_state['ai_running'] = False
 
 if __name__ == '__main__':
-    logger.info("=" * 60)
-    logger.info("NIMBUS AI SYSTEM - FLASK APPLICATION")
-    logger.info("=" * 60)
-    logger.info("Architecture: Flask-based web application with background services")
-    logger.info("Web Interface: http://localhost:5000")
-    logger.info("API Endpoints: http://localhost:5000/api/*")
-    logger.info("")
-    
-    try:
-        # Initialize services before starting Flask
-        initialize_application()
-        
-        # Start the Flask application
-        app.run(
-            host='localhost',
-            port=5000,
-            debug=False,  # Set to False to avoid issues with threading
-            threaded=True,
-            use_reloader=False  # Disable reloader to prevent service duplication
-        )
-    except KeyboardInterrupt:
-        logger.info("Application interrupted by user")
-    except Exception as e:
-        logger.error(f"Application error: {e}")
-    finally:
-        stop_background_services()
-        logger.info("Nimbus AI System shutdown complete")
+    logger.error("This module should not be run directly")
+    logger.error("It is spawned as a child process by nimbus-hub/hub.py")
+    sys.exit(1)

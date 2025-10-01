@@ -1,0 +1,561 @@
+<?xml version="1.0" ?>
+<sdf version="1.6">
+  <world name="white_room_world">
+    <physics name="default" type="ode">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+    </physics>
+
+    <scene>
+      <ambient>0.8 0.8 0.8</ambient>
+      <background>0.9 0.9 0.9</background>
+      <shadows>true</shadows>
+    </scene>
+
+    <!-- Main lighting -->
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.9 0.9 0.9 1</diffuse>
+      <specular>0.3 0.3 0.3 1</specular>
+      <attenuation>
+        <range>1000</range>
+        <constant>0.9</constant>
+        <linear>0.01</linear>
+        <quadratic>0.001</quadratic>
+      </attenuation>
+      <direction>-0.3 0.1 -0.9</direction>
+    </light>
+
+    <!-- Additional ceiling lights for better interior lighting -->
+    <light type="point" name="ceiling_light_1">
+      <pose>3 3 2.8 0 0 0</pose>
+      <diffuse>0.7 0.7 0.7 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <attenuation>
+        <range>10</range>
+        <constant>0.5</constant>
+        <linear>0.1</linear>
+        <quadratic>0.01</quadratic>
+      </attenuation>
+    </light>
+
+    <light type="point" name="ceiling_light_2">
+      <pose>-3 3 2.8 0 0 0</pose>
+      <diffuse>0.7 0.7 0.7 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <attenuation>
+        <range>10</range>
+        <constant>0.5</constant>
+        <linear>0.1</linear>
+        <quadratic>0.01</quadratic>
+      </attenuation>
+    </light>
+
+    <light type="point" name="ceiling_light_3">
+      <pose>3 -3 2.8 0 0 0</pose>
+      <diffuse>0.7 0.7 0.7 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <attenuation>
+        <range>10</range>
+        <constant>0.5</constant>
+        <linear>0.1</linear>
+        <quadratic>0.01</quadratic>
+      </attenuation>
+    </light>
+
+    <light type="point" name="ceiling_light_4">
+      <pose>-3 -3 2.8 0 0 0</pose>
+      <diffuse>0.7 0.7 0.7 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <attenuation>
+        <range>10</range>
+        <constant>0.5</constant>
+        <linear>0.1</linear>
+        <quadratic>0.01</quadratic>
+      </attenuation>
+    </light>
+
+    <!-- White floor (15x15m) -->
+    <model name="floor">
+      <static>true</static>
+      <pose>0 0 0 0 0 0</pose>
+      <link name="floor_link">
+        <collision name="floor_collision">
+          <geometry>
+            <box>
+              <size>15 15 0.1</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="floor_visual">
+          <geometry>
+            <box>
+              <size>15 15 0.1</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.95 0.95 0.95 1</ambient>
+            <diffuse>0.95 0.95 0.95 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Walls -->
+    <!-- North wall -->
+    <model name="north_wall">
+      <static>true</static>
+      <pose>0 7.5 1.5 0 0 0</pose>
+      <link name="wall_link">
+        <collision name="wall_collision">
+          <geometry>
+            <box>
+              <size>15 0.2 3</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="wall_visual">
+          <geometry>
+            <box>
+              <size>15 0.2 3</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.98 0.98 0.98 1</ambient>
+            <diffuse>0.98 0.98 0.98 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- South wall -->
+    <model name="south_wall">
+      <static>true</static>
+      <pose>0 -7.5 1.5 0 0 0</pose>
+      <link name="wall_link">
+        <collision name="wall_collision">
+          <geometry>
+            <box>
+              <size>15 0.2 3</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="wall_visual">
+          <geometry>
+            <box>
+              <size>15 0.2 3</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.98 0.98 0.98 1</ambient>
+            <diffuse>0.98 0.98 0.98 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- East wall -->
+    <model name="east_wall">
+      <static>true</static>
+      <pose>7.5 0 1.5 0 0 0</pose>
+      <link name="wall_link">
+        <collision name="wall_collision">
+          <geometry>
+            <box>
+              <size>0.2 15 3</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="wall_visual">
+          <geometry>
+            <box>
+              <size>0.2 15 3</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.98 0.98 0.98 1</ambient>
+            <diffuse>0.98 0.98 0.98 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- West wall -->
+    <model name="west_wall">
+      <static>true</static>
+      <pose>-7.5 0 1.5 0 0 0</pose>
+      <link name="wall_link">
+        <collision name="wall_collision">
+          <geometry>
+            <box>
+              <size>0.2 15 3</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="wall_visual">
+          <geometry>
+            <box>
+              <size>0.2 15 3</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.98 0.98 0.98 1</ambient>
+            <diffuse>0.98 0.98 0.98 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Ceiling -->
+    <model name="ceiling">
+      <static>true</static>
+      <pose>0 0 3 0 0 0</pose>
+      <link name="ceiling_link">
+        <collision name="ceiling_collision">
+          <geometry>
+            <box>
+              <size>15 15 0.1</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="ceiling_visual">
+          <geometry>
+            <box>
+              <size>15 15 0.1</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.98 0.98 0.98 1</ambient>
+            <diffuse>0.98 0.98 0.98 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Furniture Models -->
+
+    <!-- Couch 1 (L-shaped, main seating area) -->
+    <model name="couch_1">
+      <static>true</static>
+      <pose>-4 4 0.4 0 0 0</pose>
+      <link name="couch_link">
+        <!-- Main couch body -->
+        <visual name="couch_body">
+          <geometry>
+            <box>
+              <size>2.5 1 0.8</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.4 0.4 0.4 1</ambient>
+            <diffuse>0.4 0.4 0.4 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+          </material>
+        </visual>
+        <collision name="couch_collision">
+          <geometry>
+            <box>
+              <size>2.5 1 0.8</size>
+            </box>
+          </geometry>
+        </collision>
+
+        <!-- Couch back -->
+        <visual name="couch_back">
+          <pose>0 -0.45 0.4 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>2.5 0.1 0.8</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.35 0.35 0.35 1</ambient>
+            <diffuse>0.35 0.35 0.35 1</diffuse>
+          </material>
+        </visual>
+
+        <!-- Couch arms -->
+        <visual name="couch_arm_left">
+          <pose>-1.2 0 0.2 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>0.1 1 0.4</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.35 0.35 0.35 1</ambient>
+            <diffuse>0.35 0.35 0.35 1</diffuse>
+          </material>
+        </visual>
+
+        <visual name="couch_arm_right">
+          <pose>1.2 0 0.2 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>0.1 1 0.4</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.35 0.35 0.35 1</ambient>
+            <diffuse>0.35 0.35 0.35 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Couch 2 (smaller, opposite side) -->
+    <model name="couch_2">
+      <static>true</static>
+      <pose>4 -3 0.4 0 0 1.57</pose>
+      <link name="couch_link">
+        <visual name="couch_body">
+          <geometry>
+            <box>
+              <size>2 1 0.8</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.3 0.3 0.5 1</ambient>
+            <diffuse>0.3 0.3 0.5 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+          </material>
+        </visual>
+        <collision name="couch_collision">
+          <geometry>
+            <box>
+              <size>2 1 0.8</size>
+            </box>
+          </geometry>
+        </collision>
+
+        <visual name="couch_back">
+          <pose>0 -0.45 0.4 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>2 0.1 0.8</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.25 0.25 0.45 1</ambient>
+            <diffuse>0.25 0.25 0.45 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Coffee Table (center) -->
+    <model name="coffee_table">
+      <static>true</static>
+      <pose>0 1 0.4 0 0 0</pose>
+      <link name="table_link">
+        <!-- Table top -->
+        <visual name="table_top">
+          <geometry>
+            <box>
+              <size>1.2 0.8 0.05</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.6 0.4 0.2 1</ambient>
+            <diffuse>0.6 0.4 0.2 1</diffuse>
+            <specular>0.3 0.3 0.3 1</specular>
+          </material>
+        </visual>
+        <collision name="table_collision">
+          <geometry>
+            <box>
+              <size>1.2 0.8 0.05</size>
+            </box>
+          </geometry>
+        </collision>
+
+        <!-- Table legs -->
+        <visual name="leg_1">
+          <pose>0.5 0.35 -0.2 0 0 0</pose>
+          <geometry>
+            <cylinder>
+              <radius>0.03</radius>
+              <length>0.4</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.5 0.3 0.1 1</ambient>
+            <diffuse>0.5 0.3 0.1 1</diffuse>
+          </material>
+        </visual>
+
+        <visual name="leg_2">
+          <pose>-0.5 0.35 -0.2 0 0 0</pose>
+          <geometry>
+            <cylinder>
+              <radius>0.03</radius>
+              <length>0.4</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.5 0.3 0.1 1</ambient>
+            <diffuse>0.5 0.3 0.1 1</diffuse>
+          </material>
+        </visual>
+
+        <visual name="leg_3">
+          <pose>0.5 -0.35 -0.2 0 0 0</pose>
+          <geometry>
+            <cylinder>
+              <radius>0.03</radius>
+              <length>0.4</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.5 0.3 0.1 1</ambient>
+            <diffuse>0.5 0.3 0.1 1</diffuse>
+          </material>
+        </visual>
+
+        <visual name="leg_4">
+          <pose>-0.5 -0.35 -0.2 0 0 0</pose>
+          <geometry>
+            <cylinder>
+              <radius>0.03</radius>
+              <length>0.4</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.5 0.3 0.1 1</ambient>
+            <diffuse>0.5 0.3 0.1 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Dining Table -->
+    <model name="dining_table">
+      <static>true</static>
+      <pose>-4 -4 0.75 0 0 0</pose>
+      <link name="table_link">
+        <visual name="table_top">
+          <geometry>
+            <box>
+              <size>2 1.2 0.05</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.7 0.5 0.3 1</ambient>
+            <diffuse>0.7 0.5 0.3 1</diffuse>
+            <specular>0.4 0.4 0.4 1</specular>
+          </material>
+        </visual>
+        <collision name="table_collision">
+          <geometry>
+            <box>
+              <size>2 1.2 0.05</size>
+            </box>
+          </geometry>
+        </collision>
+
+        <!-- Central pedestal -->
+        <visual name="pedestal">
+          <pose>0 0 -0.375 0 0 0</pose>
+          <geometry>
+            <cylinder>
+              <radius>0.3</radius>
+              <length>0.75</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.6 0.4 0.2 1</ambient>
+            <diffuse>0.6 0.4 0.2 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Side Table -->
+    <model name="side_table">
+      <static>true</static>
+      <pose>6 5 0.6 0 0 0</pose>
+      <link name="table_link">
+        <visual name="table_top">
+          <geometry>
+            <box>
+              <size>0.6 0.6 0.04</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.8 0.8 0.8 1</ambient>
+            <diffuse>0.8 0.8 0.8 1</diffuse>
+            <specular>0.2 0.2 0.2 1</specular>
+          </material>
+        </visual>
+        <collision name="table_collision">
+          <geometry>
+            <box>
+              <size>0.6 0.6 0.04</size>
+            </box>
+          </geometry>
+        </collision>
+
+        <!-- Table legs -->
+        <visual name="leg_1">
+          <pose>0.25 0.25 -0.3 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>0.04 0.04 0.6</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.7 0.7 0.7 1</ambient>
+            <diffuse>0.7 0.7 0.7 1</diffuse>
+          </material>
+        </visual>
+
+        <visual name="leg_2">
+          <pose>-0.25 0.25 -0.3 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>0.04 0.04 0.6</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.7 0.7 0.7 1</ambient>
+            <diffuse>0.7 0.7 0.7 1</diffuse>
+          </material>
+        </visual>
+
+        <visual name="leg_3">
+          <pose>0.25 -0.25 -0.3 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>0.04 0.04 0.6</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.7 0.7 0.7 1</ambient>
+            <diffuse>0.7 0.7 0.7 1</diffuse>
+          </material>
+        </visual>
+
+        <visual name="leg_4">
+          <pose>-0.25 -0.25 -0.3 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>0.04 0.04 0.6</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.7 0.7 0.7 1</ambient>
+            <diffuse>0.7 0.7 0.7 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+  </world>
+</sdf>

@@ -1,18 +1,18 @@
 flask==3.0.1
-gunicorn==21.2.0
-requests==2.31.0
-numpy==1.24.3
-opencv-python==4.8.1.78
+requests==2.32.3
+numpy==1.24.4
+opencv-python==4.9.0.80
 
 # AI/ML Dependencies
-torch==2.8.0
-torchvision==0.22.0
-ultralytics==8.3.181
-transformers==4.30.2
-faster-whisper==0.7.1
+# torch and torchvision: Install separately with CUDA support
+# pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu129
+ultralytics==8.3.203
+transformers==4.56.2
+faster-whisper==1.2.0
 
-# ROS2 Integration
-rclpy==3.3.7
+# Audio Dependencies
+soundfile==0.13.1
+pyaudio==0.2.14
 
-# Logging and utilities
-logging==0.4.9.6
+# WebSocket for ROS2
+websocket-client==1.8.0

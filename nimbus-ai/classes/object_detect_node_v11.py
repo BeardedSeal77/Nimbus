@@ -20,13 +20,28 @@ from ultralytics import YOLO
 
 class ObjectDetector:
     def __init__(self):
-        """Initialize the YOLOv8 model"""
-        self.model = YOLO("yolov8s.pt")
+        """Initialize YOLO model with GPU optimization for RTX 4070 Super"""
+        import torch
+
+        # Use YOLOv11n for speed (change to yolo11s/m/l for accuracy)
+        self.model = YOLO("yolo11n.pt")
+
+        # Check CUDA availability
+        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        if self.device == 'cuda':
+            print(f"GPU detected: {torch.cuda.get_device_name(0)}")
+            print(f"CUDA version: {torch.version.cuda}")
+        else:
+            print("WARNING: Running on CPU - GPU not detected!")
+
+        # Skip warmup - will happen on first real frame
         self.last_results = None
-    
+        print(f"YOLO initialized on {self.device} with FP16 acceleration")
+        print("Note: First inference will be slower due to GPU warmup")
+
     def detect(self, target_object: str, image_source) -> dict:
         """
-        Detects the specified object in the given image using YOLOv8.
+        Detects the specified object in the given image using YOLO.
 
         Parameters:
             target_object (str): Name of the object to detect (e.g. "chair")
@@ -37,8 +52,14 @@ class ObjectDetector:
                   or {} if not found
         """
         try:
-            # Run detection and store results
-            self.last_results = self.model.predict(image_source, verbose=False)
+            # Run detection with GPU and FP16 for max speed
+            self.last_results = self.model.predict(
+                image_source,
+                device=self.device,
+                verbose=False,
+                half=True,  # FP16 inference on GPU
+                imgsz=640   # Input size (can reduce to 416 for more speed)
+            )
 
             for result in self.last_results:
                 boxes = result.boxes

@@ -71,13 +71,17 @@ echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/pkgs-
 echo "Updating package lists..."
 sudo apt update
 
-# Install minimal ROS2 for bridge only
-echo "Installing minimal ROS2 (just for bridge)..."
+# Install ROS2 Jazzy (Ubuntu 24.04 official + Gazebo Harmonic support)
+echo "Installing ROS2 Jazzy (Ubuntu 24.04 official + Gazebo Harmonic support)..."
 sudo apt install -y \
     ros-jazzy-ros-core \
     ros-jazzy-geometry-msgs \
     ros-jazzy-sensor-msgs \
     ros-jazzy-nav-msgs \
+    ros-jazzy-std-msgs \
+    ros-jazzy-ros-gz-bridge \
+    ros-jazzy-ros-gz-sim \
+    ros-jazzy-rmw-cyclonedds-cpp \
     python3-colcon-common-extensions \
     python3-rosdep
 
@@ -141,7 +145,7 @@ echo "source ~/nimbus_ws/install/setup.bash" >> ~/.bashrc
 # Create startup script
 echo "Creating startup script..."
 
-cat << 'EOF' > ~/start-nimbus-gazebo.sh
+cat << 'STARTUP_EOF' > ~/start-nimbus-gazebo.sh
 #!/bin/bash
 # Start Gazebo simulation for Nimbus project
 
@@ -149,31 +153,117 @@ echo "Starting Nimbus Gazebo Simulation..."
 echo "Make sure Docker containers are running first!"
 echo ""
 
-# Set ROS domain
+# Set ROS2 environment for FastRTPS connection to Docker
 export ROS_DOMAIN_ID=0
+export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
+export FASTRTPS_DEFAULT_PROFILES_FILE=/tmp/fastrtps_profile.xml
+
+# Create FastRTPS profile to connect directly to Docker
+cat > /tmp/fastrtps_profile.xml << 'PROFILE_EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<profiles>
+  <participant profile_name="default_participant" is_default_profile="true">
+    <rtps>
+      <builtin>
+        <discovery_config>
+          <static_edp_xml_config>
+            <participant>
+              <name>DockerROS2</name>
+              <unicast_locator address="192.168.8.102" port="7400"/>
+            </participant>
+          </static_edp_xml_config>
+        </discovery_config>
+      </builtin>
+    </rtps>
+  </participant>
+</profiles>
+PROFILE_EOF
 
 # Source ROS2
 source /opt/ros/jazzy/setup.bash
 source ~/nimbus_ws/install/setup.bash
 
-# Start Gazebo Harmonic
+# Copy world files
+echo "Setting up world files..."
+mkdir -p ~/.gazebo/models
+mkdir -p ~/.simulation-gazebo/worlds
+
+PROJECT_PATH="/mnt/c/Users/edcul/OneDrive/Documents/Work/Modules/Year 3/PRJ/Nimbus"
+if [ -f "$PROJECT_PATH/gazebo/gazebo-worlds/world.sdf" ]; then
+    cp "$PROJECT_PATH/gazebo/gazebo-worlds/world.sdf" ~/.simulation-gazebo/worlds/
+    cp "$PROJECT_PATH/gazebo/gazebo-worlds/world.dae" ~/.simulation-gazebo/worlds/
+    echo "World files copied successfully"
+else
+    echo "World files not found, will start with empty world"
+fi
+
+# Start ROS2-Gazebo bridge
+echo "Starting ROS2-Gazebo bridge..."
+ros2 run ros_gz_bridge parameter_bridge \
+    /tello/cmd_vel@geometry_msgs/msg/Twist@gz.msgs.Twist \
+    /tello/odom@nav_msgs/msg/Odometry@gz.msgs.Odometry \
+    /tello/camera/image_raw@sensor_msgs/msg/Image@gz.msgs.Image \
+    /tello/status@std_msgs/msg/String@gz.msgs.StringMsg &
+BRIDGE_PID=$!
+
+# Start status publisher
+python3 -c "
+import rclpy
+from rclpy.node import Node
+from std_msgs.msg import String
+
+class StatusPublisher(Node):
+    def __init__(self):
+        super().__init__('tello_status_publisher')
+        self.publisher = self.create_publisher(String, '/tello/status', 10)
+        self.timer = self.create_timer(2.0, self.publish_status)
+
+    def publish_status(self):
+        msg = String()
+        msg.data = 'waiting'
+        self.publisher.publish(msg)
+
+def main():
+    rclpy.init()
+    publisher = StatusPublisher()
+    try:
+        rclpy.spin(publisher)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()
+" &
+STATUS_PID=$!
+
+sleep 2
+
+# Start Gazebo
 echo "Starting Gazebo Harmonic..."
-gz sim &
+if [ -f ~/.simulation-gazebo/worlds/world.sdf ]; then
+    gz sim ~/.simulation-gazebo/worlds/world.sdf &
+else
+    gz sim &
+fi
 GAZEBO_PID=$!
 
 echo ""
 echo "=== Nimbus Gazebo Started ==="
 echo "Gazebo PID: $GAZEBO_PID"
 echo ""
-echo "To stop: pkill gazebo"
-echo ""
 
 # Wait for user input
 read -p "Press Enter to stop Gazebo..."
 kill $GAZEBO_PID 2>/dev/null || true
+kill $BRIDGE_PID 2>/dev/null || true
+kill $STATUS_PID 2>/dev/null || true
 pkill -f "gz sim" 2>/dev/null || true
+pkill -f "parameter_bridge" 2>/dev/null || true
+pkill -f "tello_status_publisher" 2>/dev/null || true
 echo "Stopped."
-EOF
+STARTUP_EOF
 
 chmod +x ~/start-nimbus-gazebo.sh
 

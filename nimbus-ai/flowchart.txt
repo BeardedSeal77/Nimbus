@@ -1,0 +1,71 @@
+flowchart LR
+    subgraph HubInput["Central Hub - Input"]
+        HubVideoOut["Video Stream Output"]:::hubStyle
+        HubAudioOut["Audio Stream Output"]:::hubStyle
+    end
+    
+    subgraph AIProcess["AI Process (Asynchronous)"]
+        
+        subgraph VideoPipeline["Video Pipeline"]
+            RawVideo["Raw Video Input"]:::videoStyle
+            VideoPassthrough["Raw Video Passthrough"]:::videoStyle
+            FrameCapture["Frame Capture (Every 100ms)"]:::videoStyle
+            ObjectDetection["Object Detection"]:::processStyle
+            DepthCheck{"Depth Detection Enabled?"}:::decisionStyle
+            DepthDetection["Depth Detection (SfM or Trig)"]:::processStyle
+            VideoOverlay["Overlay Results (Bounding Boxes + Distance)"]:::processStyle
+            ProcessedVideo["Processed Video"]:::videoStyle
+        end
+        
+        subgraph AudioPipeline["Audio Pipeline"]
+            AudioInput["Audio Input"]:::audioStyle
+            RecordBtn["Record Button Press"]:::audioStyle
+            Recording["Audio Recording"]:::audioStyle
+            StopBtn["Stop Recording Button"]:::audioStyle
+            TTS["Speech-to-Text (Whisper)"]:::processStyle
+            LLM["LLM Classification (Ollama)"]:::processStyle
+            IntentExtract["Extract Intent & Object Example: 'go to chair' Intent: go Object: chair"]:::processStyle
+        end
+    end
+    
+    subgraph HubOutput["Central Hub - Output"]
+        HubVars["Global Variables Storage"]:::hubStyle
+        ProcessedVideoIn["Processed Video Input"]:::hubStyle
+        BoundingBoxIn["Bounding Box X,Y Input"]:::hubStyle
+        DistanceIn["Distance Data Input"]:::hubStyle
+        IntentObjectIn["Intent & Object Input"]:::hubStyle
+    end
+    
+    HubVideoOut --> RawVideo
+    HubAudioOut --> AudioInput
+    
+    AudioInput --> RecordBtn --> Recording --> StopBtn --> TTS
+    
+    RawVideo --> VideoPassthrough
+    RawVideo --> FrameCapture
+    FrameCapture -.->|Async| ObjectDetection
+    ObjectDetection -.->|Async| DepthCheck
+    DepthCheck -->|Yes| DepthDetection
+    DepthCheck -->|No| VideoOverlay
+    DepthDetection --> VideoOverlay
+    ObjectDetection --> VideoOverlay
+    VideoPassthrough --> VideoOverlay
+    VideoOverlay --> ProcessedVideo
+    
+    TTS --> LLM --> IntentExtract
+    
+    ProcessedVideo --> ProcessedVideoIn
+    ObjectDetection -->|Bounding Box X,Y| BoundingBoxIn
+    DepthDetection -->|Distance Data| DistanceIn
+    IntentExtract -->|Intent & Object| IntentObjectIn
+    
+    ProcessedVideoIn --> HubVars
+    BoundingBoxIn --> HubVars
+    DistanceIn --> HubVars
+    IntentObjectIn --> HubVars
+    
+    classDef hubStyle fill:#4A90E2,stroke:#2E5C8A,stroke-width:2px,color:#fff
+    classDef videoStyle fill:#E24A90,stroke:#8A2E5C,stroke-width:2px,color:#fff
+    classDef audioStyle fill:#90E24A,stroke:#5C8A2E,stroke-width:2px,color:#fff
+    classDef processStyle fill:#E2904A,stroke:#8A5C2E,stroke-width:2px,color:#fff
+    classDef decisionStyle fill:#9B4AE2,stroke:#5C2E8A,stroke-width:2px,color:#fff

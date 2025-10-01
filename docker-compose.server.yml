@@ -1,0 +1,57 @@
+# Server Docker Compose (192.168.8.101)
+# Use this when moving ROS2 + Ollama to server
+# Run with: docker-compose -f docker-compose.server.yml up -d
+
+services:
+  # Central ROS2 + RTAB-Map Container
+  ros2-central:
+    image: ros:jazzy
+    container_name: ros2-central
+    ports:
+      - "9090:9090"    # Rosbridge WebSocket
+    networks:
+      ros2-network:
+        ipv4_address: 192.168.8.101
+    environment:
+      - ROS_DOMAIN_ID=0
+      - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+      - ROS_LOCALHOST_ONLY=0
+      - CYCLONEDX_URI=file:///ros2_ws/cyclonedx.xml
+    volumes:
+      - ./ros2-config:/ros2_ws/src/nimbus_config
+      - ./docker/cyclonedx-server.xml:/ros2_ws/cyclonedx.xml
+    privileged: true
+    command: ["bash", "-c", "source /opt/ros/jazzy/setup.bash && apt update && apt install -y ros-jazzy-rosbridge-suite ros-jazzy-rmw-cyclonedds-cpp && ros2 run rosbridge_server rosbridge_websocket --ros-args -p port:=9090 & tail -f /dev/null"]
+    stdin_open: true
+    tty: true
+
+  # Ollama LLM Container
+  ollama:
+    image: ollama/ollama:latest
+    container_name: nimbus-ollama
+    ports:
+      - 11434:11434
+    volumes:
+      - ollama:/root/.ollama
+    networks:
+      ros2-network:
+        ipv4_address: 192.168.8.105
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+networks:
+  ros2-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 192.168.8.0/24
+          gateway: 192.168.8.1
+
+volumes:
+  ollama:
+    external: true

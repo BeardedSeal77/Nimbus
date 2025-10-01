@@ -5,19 +5,26 @@
 services:
   # Central ROS2 + RTAB-Map Container
   ros2-central:
-    image: introlab3it/rtabmap_ros:humble
+    image: ros:jazzy
     container_name: ros2-central
     ports:
-      - 11311:11311  # ROS Master
-      - 9090:9090    # ROS Bridge WebSocket
+      - "9090:9090"    # Rosbridge WebSocket
+      - "7400:7400"    # DDS discovery
+      - "7401:7401"    # DDS data
+    networks:
+      ros2-network:
+        ipv4_address: 192.168.8.102
     environment:
       - ROS_DOMAIN_ID=0
-    networks:
-      - nimbus-network
+      - ROS_LOCALHOST_ONLY=0
+      - ROS2_HOSTNAME=192.168.8.102
+      - ROS_AUTOMATIC_DISCOVERY_RANGE=SUBNET
+      - ROS_STATIC_PEERS=192.168.8.102
     volumes:
       - ./ros2-config:/ros2_ws/src/nimbus_config
+      - ./docker/cyclonedx.xml:/ros2_ws/cyclonedx.xml
     privileged: true
-    command: ["bash", "-c", "source /opt/ros/humble/setup.bash && apt update && apt install -y ros-humble-rosbridge-suite && ros2 run rosbridge_server rosbridge_websocket --ros-args -p port:=9090 & tail -f /dev/null"]
+    command: ["bash", "-c", "source /opt/ros/jazzy/setup.bash && apt update && apt install -y ros-jazzy-rosbridge-suite ros-jazzy-rmw-cyclonedds-cpp && ros2 run rosbridge_server rosbridge_websocket --ros-args -p port:=9090 & tail -f /dev/null"]
     stdin_open: true
     tty: true
 
@@ -30,7 +37,8 @@ services:
     volumes:
       - ollama:/root/.ollama
     networks:
-      - nimbus-network
+      ros2-network:
+        ipv4_address: 192.168.8.104
     deploy:
       resources:
         reservations:
@@ -40,8 +48,12 @@ services:
               capabilities: [gpu]
 
 networks:
-  nimbus-network:
+  ros2-network:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 192.168.8.0/24
+          gateway: 192.168.8.1
 
 volumes:
   ollama:

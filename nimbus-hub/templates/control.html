@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nimbus AI Control Panel</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/control.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>🤖 Nimbus AI Control Panel</h1>
+
+        <div class="two-column-layout">
+            <!-- Left Column -->
+            <div class="left-column">
+                <!-- Live Video Feed -->
+                <div class="control-section">
+                    <h2>📹 Live Video Feed (AI Processed)</h2>
+                    <div style="text-align: center; background: black; border-radius: 8px; overflow: hidden;">
+                        <img id="video-stream" src="/video_feed" alt="Live Video Feed" style="width: 1280px; max-width: 100%; height: auto; display: block;">
+                    </div>
+                    <div style="text-align: center; margin-top: 10px; font-size: 0.9em; opacity: 0.8;">
+                        <span>🎯 Object Detection</span> |
+                        <span>📏 Depth Overlay</span> |
+                        <span>📊 Status Info</span>
+                    </div>
+                </div>
+
+                <!-- AI Control Panel -->
+                <div class="control-section">
+                    <h2>🤖 AI Control Panel</h2>
+
+                    <div class="variable-group">
+                        <h3>🔍 Object Detection</h3>
+                        <div class="input-group">
+                            <label for="target-object">Target Object to Detect: <span id="current-target-object" style="color: #4CAF50;">car</span></label>
+                            <input type="text" id="target-object" placeholder="Enter new object name (e.g., person, car, bottle)">
+                            <small>Type any object YOLO can detect (80+ classes)</small>
+                        </div>
+                        <div class="button-group">
+                            <button class="btn-primary" onclick="setTargetObject()">
+                                🎯 Set Target Object
+                            </button>
+                            <button class="btn-warning" onclick="resetSystem()">
+                                🔄 Reset System
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="variable-group">
+                        <h3>📏 Depth Detection Control</h3>
+                        <div class="button-group">
+                            <button class="btn-primary" onclick="triggerDepthDetection()">
+                                🎯 Trigger Depth Detection
+                            </button>
+                            <button class="btn-danger" onclick="stopDepthDetection()">
+                                🛑 Stop Depth Detection
+                            </button>
+                            <button class="btn-info" onclick="refreshStatus()">
+                                🔄 Refresh Status
+                            </button>
+                        </div>
+                        <div id="depth-status" class="status-display">
+                            Click "Refresh Status" to load current system state...
+                        </div>
+                    </div>
+
+                    <div class="variable-group">
+                        <h3>🎤 Voice Command Control</h3>
+                        <div class="button-group">
+                            <button id="audio-record-btn" class="btn-primary" onclick="startAudioRecording()">
+                                🎤 Start Recording
+                            </button>
+                            <button id="audio-stop-btn" class="btn-danger" onclick="stopAudioRecording()" disabled>
+                                🛑 Stop Recording
+                            </button>
+                        </div>
+                        <div id="audio-status" class="status-display">
+                            Click "Start Recording" to record a voice command...
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Advanced Settings -->
+                <div class="control-section">
+                    <h2>⚙️ Advanced Settings</h2>
+
+                    <div class="variable-group">
+                        <h3>📏 Depth Detection Parameters</h3>
+                        <div class="input-group">
+                            <label for="depth-method">Detection Method:</label>
+                            <select id="depth-method" onchange="setDepthMethod()">
+                                <option value="TRIG">TRIG (Simulation Ground Truth)</option>
+                                <option value="SFM">SFM (Structure from Motion)</option>
+                            </select>
+                            <small>TRIG: Continuous from sim data | SFM: Frame collection over time</small>
+                        </div>
+                        <div class="input-group">
+                            <label for="frame-count">Movement Frames:</label>
+                            <input type="number" id="frame-count" value="5" min="2" max="10">
+                            <small>Number of frames to collect during camera movement (2-10, SFM only)</small>
+                        </div>
+                        <div class="input-group">
+                            <label for="reference-position">Reference Frame Position:</label>
+                            <input type="number" id="reference-position" value="10" min="6" max="20">
+                            <small>Which detection number gets the reference frame (6-20, SFM only)</small>
+                        </div>
+                        <button class="btn-info" onclick="setDepthParameters()">
+                            💾 Save Depth Settings
+                        </button>
+                    </div>
+
+                    <div class="variable-group">
+                        <h3>🧠 AI Processing Parameters</h3>
+                        <div class="input-group">
+                            <label for="frame-interval-ms">Processing Interval:</label>
+                            <input type="number" id="frame-interval-ms" value="100" min="50" max="1000" step="10">
+                            <small>Milliseconds between object detection runs (50-1000ms)</small>
+                        </div>
+                        <button class="btn-info" onclick="setAIParameters()">
+                            💾 Save AI Settings
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column -->
+            <div class="right-column">
+                <!-- Live Drone State -->
+                <div class="control-section" id="drone-stats">
+                    <h2>🚁 Live Drone Telemetry</h2>
+                    <div class="status-display">
+                        <table class="telemetry-table">
+                            <thead>
+                                <tr>
+                                    <th>Parameter</th>
+                                    <th>Value</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>🔌 Connection Status</td>
+                                    <td><span id="connection-status" style="color: red;">Disconnected</span></td>
+                                </tr>
+                                <tr>
+                                    <td>✈️ Flight Mode</td>
+                                    <td><span id="flight-mode">UNKNOWN</span></td>
+                                </tr>
+                                <tr>
+                                    <td colspan="2" style="background: rgba(255, 255, 255, 0.05); font-weight: bold; color: #ffeb3b;">📍 Position</td>
+                                </tr>
+                                <tr>
+                                    <td>X</td>
+                                    <td><span id="pos-x">0.00</span> m</td>
+                                </tr>
+                                <tr>
+                                    <td>Y</td>
+                                    <td><span id="pos-y">0.00</span> m</td>
+                                </tr>
+                                <tr>
+                                    <td>Z (Altitude)</td>
+                                    <td><span id="pos-z">0.00</span> m</td>
+                                </tr>
+                                <tr>
+                                    <td colspan="2" style="background: rgba(255, 255, 255, 0.05); font-weight: bold; color: #ffeb3b;">🧭 Orientation</td>
+                                </tr>
+                                <tr>
+                                    <td>Roll</td>
+                                    <td><span id="ori-roll">0.00</span> rad</td>
+                                </tr>
+                                <tr>
+                                    <td>Pitch</td>
+                                    <td><span id="ori-pitch">0.00</span> rad</td>
+                                </tr>
+                                <tr>
+                                    <td>Yaw</td>
+                                    <td><span id="ori-yaw">0.00</span> rad</td>
+                                </tr>
+                                <tr>
+                                    <td colspan="2" style="background: rgba(255, 255, 255, 0.05); font-weight: bold; color: #ffeb3b;">💨 Velocity</td>
+                                </tr>
+                                <tr>
+                                    <td>X</td>
+                                    <td><span id="vel-x">0.00</span> m/s</td>
+                                </tr>
+                                <tr>
+                                    <td>Y</td>
+                                    <td><span id="vel-y">0.00</span> m/s</td>
+                                </tr>
+                                <tr>
+                                    <td>Z</td>
+                                    <td><span id="vel-z">0.00</span> m/s</td>
+                                </tr>
+                                <tr>
+                                    <td colspan="2" style="background: rgba(255, 255, 255, 0.05); font-weight: bold; color: #ffeb3b;">⚡ Acceleration</td>
+                                </tr>
+                                <tr>
+                                    <td>X</td>
+                                    <td><span id="accel-x">0.00</span> m/s²</td>
+                                </tr>
+                                <tr>
+                                    <td>Y</td>
+                                    <td><span id="accel-y">0.00</span> m/s²</td>
+                                </tr>
+                                <tr>
+                                    <td>Z</td>
+                                    <td><span id="accel-z">0.00</span> m/s²</td>
+                                </tr>
+                                <tr>
+                                    <td colspan="2" style="background: rgba(255, 255, 255, 0.05); font-weight: bold; color: #ffeb3b;">🔄 Angular Velocity</td>
+                                </tr>
+                                <tr>
+                                    <td>Roll</td>
+                                    <td><span id="ang-roll">0.00</span> rad/s</td>
+                                </tr>
+                                <tr>
+                                    <td>Pitch</td>
+                                    <td><span id="ang-pitch">0.00</span> rad/s</td>
+                                </tr>
+                                <tr>
+                                    <td>Yaw</td>
+                                    <td><span id="ang-yaw">0.00</span> rad/s</td>
+                                </tr>
+                                <tr>
+                                    <td colspan="2" style="background: rgba(255, 255, 255, 0.05); font-weight: bold; color: #ffeb3b;">🎯 Facing Vector</td>
+                                </tr>
+                                <tr>
+                                    <td>X</td>
+                                    <td><span id="facing-x">1.00</span></td>
+                                </tr>
+                                <tr>
+                                    <td>Y</td>
+                                    <td><span id="facing-y">0.00</span></td>
+                                </tr>
+                                <tr>
+                                    <td>Z</td>
+                                    <td><span id="facing-z">0.00</span></td>
+                                </tr>
+                                <tr>
+                                    <td colspan="2" style="background: rgba(255, 255, 255, 0.05); font-weight: bold; color: #ffeb3b;">📊 Flight Info</td>
+                                </tr>
+                                <tr>
+                                    <td>Target Altitude</td>
+                                    <td><span id="target-alt">0.00</span> m</td>
+                                </tr>
+                                <tr>
+                                    <td>Distance to Home</td>
+                                    <td><span id="home-dist">0.00</span> m</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Messages -->
+        <div id="message-area"></div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/control.js') }}"></script>
+</body>
+</html>

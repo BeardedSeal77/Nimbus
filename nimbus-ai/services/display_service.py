@@ -17,17 +17,21 @@ class DisplayService:
         self.app = None
         self.thread = None
         self.running = False
-        
+
         # Current frame data
         self.current_frame = None
+        self.current_display_frame = None  # Processed frame with overlays
         self.current_ai_result = {}
         self.frame_lock = threading.Lock()
-        
+
         # Display system
         self.display = None
-        
+
         # Statistics
         self.frames_displayed = 0
+
+        # Configuration
+        self.show_opencv_window = False  # Set to True to enable OpenCV window display
         
     def start_service(self, app):
         """Start the display service"""
@@ -90,27 +94,36 @@ class DisplayService:
                     
                     # Create display frame with overlays
                     display_frame = self.display.create_display_frame(
-                        frame, 
-                        ai_result, 
-                        self.frames_displayed, 
+                        frame,
+                        ai_result,
+                        self.frames_displayed,
                         time.time()  # Simple elapsed time
                     )
-                    
-                    # Show frame
-                    cv2.imshow('Nimbus AI - Live Video Feed', display_frame)
-                    self.frames_displayed += 1
-                    
-                    # Handle key presses
-                    key = cv2.waitKey(1) & 0xFF
-                    if key == ord('q'):
-                        logger.info("Quit requested by user")
-                        self._request_shutdown()
-                        break
-                    elif key == ord('s'):
-                        logger.info(f"Stats - Frames displayed: {self.frames_displayed}")
-                    elif key == ord('r'):
-                        logger.info("Reset requested")
-                        self._reset_stats()
+
+                    # Store processed frame for web streaming
+                    with self.frame_lock:
+                        self.current_display_frame = display_frame.copy()
+
+                    # Show frame in OpenCV window (if enabled)
+                    if self.show_opencv_window:
+                        cv2.imshow('Nimbus AI - Live Video Feed', display_frame)
+                        self.frames_displayed += 1
+
+                        # Handle key presses
+                        key = cv2.waitKey(1) & 0xFF
+                        if key == ord('q'):
+                            logger.info("Quit requested by user")
+                            self._request_shutdown()
+                            break
+                        elif key == ord('s'):
+                            logger.info(f"Stats - Frames displayed: {self.frames_displayed}")
+                        elif key == ord('r'):
+                            logger.info("Reset requested")
+                            self._reset_stats()
+                    else:
+                        # Still need waitKey for OpenCV to process frames
+                        cv2.waitKey(1)
+                        self.frames_displayed += 1
                 
                 time.sleep(0.033)  # ~30 FPS display rate
                 
