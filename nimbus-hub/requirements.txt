@@ -3,6 +3,9 @@ requests>=2.32.3
 numpy>=1.24.4
 opencv-python>=4.9.0.80
 
+# WebSocket for ROS2
+websocket-client>=1.8.0
+
 # AI/ML Dependencies
 # torch and torchvision: Installed separately with CUDA support via startup script
 # pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cu129

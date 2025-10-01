@@ -59,11 +59,21 @@ def health_check():
 def drone_state_stream():
     """Server-Sent Events stream for live drone state updates"""
     def generate():
+        import requests
+
         while True:
-            # Send current drone state as SSE
+            try:
+                # Get latest drone state via HTTP GET (avoids import issues)
+                response = requests.get('http://127.0.0.1:5000/drone/state', timeout=0.05)
+                if response.status_code == 200:
+                    hub_state = response.json()
+                    _drone_state.update(hub_state)
+            except:
+                pass  # Keep last known state
+
             data = json.dumps(_drone_state)
             yield f"data: {data}\n\n"
-            time.sleep(0.1)  # Update at 10Hz
+            time.sleep(0.01)  # Update at 100Hz
 
     return Response(
         stream_with_context(generate()),

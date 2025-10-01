@@ -242,14 +242,20 @@ class ProcessedDisplay:
                        (bar_x, bar_y - 5), self.font, 0.5, self.colors['info'], 1)
             y_pos += 30
         
-        # Show depth estimation status
+        # Show depth estimation status and distance
         global_get_dist = ai_result.get('global_get_dist')
+        target_distance = ai_result.get('target_distance')
+
         if global_get_dist is not None:
             if global_get_dist == 1:
-                cv2.putText(frame, "Depth Estimation: ENABLED", 
-                           (10, y_pos), self.font, 0.5, self.colors['slam_good'], 1)
+                if target_distance is not None and target_distance > 0:
+                    cv2.putText(frame, f"Distance to Target: {target_distance:.2f}m",
+                               (10, y_pos), self.font, 0.5, self.colors['slam_good'], 1)
+                else:
+                    cv2.putText(frame, "Depth Detection: Active (collecting...)",
+                               (10, y_pos), self.font, 0.5, self.colors['slam_good'], 1)
             else:
-                cv2.putText(frame, "Depth Estimation: DISABLED", 
+                cv2.putText(frame, "Depth Detection: DISABLED",
                            (10, y_pos), self.font, 0.5, (128, 128, 128), 1)
     
     def _add_system_status(self, frame: np.ndarray, ai_result: Dict):

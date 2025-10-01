@@ -46,21 +46,28 @@ def clamp(value, value_min, value_max):
 # ============================================================================
 
 CONFIG = {
-    # Flight Control Parameters
-    'K_VERTICAL_THRUST': 68.5,
+    # Flight Control Parameters (balanced for Webots simulation)
+    'K_VERTICAL_THRUST': 68.5,  # Base thrust (back to stable value)
     'K_VERTICAL_OFFSET': 0.6,
-    'K_VERTICAL_P': 3.0,
-    'K_ROLL_P': 50.0,
-    'K_PITCH_P': 30.0,
+    'K_VERTICAL_P': 3.5,
+    'K_VERTICAL_D': 0.3,
+    'K_ROLL_P': 55.0,
+    'K_PITCH_P': 35.0,
 
-    # Control Inputs (keyboard disturbances)
-    'PITCH_DISTURBANCE_FORWARD': -2.0,
-    'PITCH_DISTURBANCE_BACKWARD': 2.0,
+    # Motor limiting (prevent overcorrection oscillations)
+    'MAX_MOTOR_DIFFERENTIAL': 15.0,  # Max difference from base thrust per motor
+
+    # Control Inputs (keyboard disturbances) - increased for higher speed
+    'PITCH_DISTURBANCE_FORWARD': -6.0,
+    'PITCH_DISTURBANCE_BACKWARD': 6.0,
     'YAW_DISTURBANCE_RIGHT': -1.3,
     'YAW_DISTURBANCE_LEFT': 1.3,
-    'ROLL_DISTURBANCE_RIGHT': -1.0,
-    'ROLL_DISTURBANCE_LEFT': 1.0,
+    'ROLL_DISTURBANCE_RIGHT': -6.0,
+    'ROLL_DISTURBANCE_LEFT': 6.0,
     'ALTITUDE_INCREMENT': 0.05,
+
+    # Smooth control ramping (prevents snapping)
+    'DISTURBANCE_RAMP_TIME': 0.3,  # Seconds to reach max disturbance
 
     # Home Position
     'HOME_POSITION': {'x': 0.0, 'y': 0.0, 'z': 0.0},
@@ -82,6 +89,9 @@ CONFIG = {
     # Camera
     'CAMERA_ROLL_FACTOR': -0.115,
     'CAMERA_PITCH_FACTOR': -0.1,
+    'CAMERA_MANUAL_INCREMENT': 0.05,  # Radians per keypress
+    'CAMERA_PITCH_STABILIZATION_GAIN': -0.8,  # Inverted pitch compensation (negative = counter drone pitch)
+    'CAMERA_STABILIZATION_SMOOTHING': 0.3,  # Seconds to smooth camera movements
 }
 
 # World Objects (from mavic_2_pro.wbt)
@@ -486,6 +496,26 @@ class Mavic2ProROS2Controller(Robot):
         self.camera_roll_motor = self.getDevice("camera roll")
         self.camera_pitch_motor = self.getDevice("camera pitch")
 
+        # Camera manual control state
+        self.camera_manual_roll = 0.0
+        self.camera_manual_pitch = 0.0
+        self.camera_stabilization_enabled = True
+
+        # Camera smoothed pitch stabilization
+        self.camera_target_pitch = 0.0
+        self.camera_current_pitch = 0.0
+
+        # Smooth disturbance control (current and target values)
+        self.current_roll_disturbance = 0.0
+        self.current_pitch_disturbance = 0.0
+        self.current_yaw_disturbance = 0.0
+        self.target_roll_disturbance = 0.0
+        self.target_pitch_disturbance = 0.0
+        self.target_yaw_disturbance = 0.0
+
+        # PID derivative tracking
+        self.prev_altitude = 0.0
+
         self.front_left_motor = self.getDevice("front left propeller")
         self.front_right_motor = self.getDevice("front right propeller")
         self.rear_left_motor = self.getDevice("rear left propeller")
@@ -667,7 +697,8 @@ class Mavic2ProROS2Controller(Robot):
                 'target_altitude': self.state.target_altitude,
                 'distance_to_home': self.state.distance_to_home(),
                 'connected': True,
-                'timestamp': self.getTime()
+                'timestamp': self.getTime(),
+                'world_objects': WORLD_OBJECTS  # Ground truth object positions for TRIG depth method
             }
 
             # Non-blocking POST to hub
@@ -711,16 +742,20 @@ class Mavic2ProROS2Controller(Robot):
                 break
 
         print("You can control the drone with your computer keyboard:")
-        print("- 'up': move forward.")
-        print("- 'down': move backward.")
-        print("- 'right': turn right.")
-        print("- 'left': turn left.")
-        print("- 'shift + up': increase the target altitude.")
-        print("- 'shift + down': decrease the target altitude.")
-        print("- 'shift + right': strafe right.")
-        print("- 'shift + left': strafe left.")
-        print("- 'H': return home and land.")
-        print("- 'L': land at current position.")
+        print("- Arrow Up: move forward")
+        print("- Arrow Down: move backward")
+        print("- Arrow Right: strafe right")
+        print("- Arrow Left: strafe left")
+        print("- Numpad 1: decrease altitude")
+        print("- Numpad 3: increase altitude")
+        print("- Numpad 7: yaw left")
+        print("- Numpad 9: yaw right")
+        print("- Numpad 2: camera tilt down")
+        print("- Numpad 8: camera tilt up")
+        print("- Numpad 4: camera pan left")
+        print("- Numpad 6: camera pan right")
+        print("- H: return home and land")
+        print("- L: land at current position")
 
         last_publish_time = 0
         last_hub_publish_time = 0
@@ -744,54 +779,166 @@ class Mavic2ProROS2Controller(Robot):
             self.front_left_led.set(1 if led_state else 0)
             self.front_right_led.set(0 if led_state else 1)
 
-            # Camera stabilization
-            self.camera_roll_motor.setPosition(CONFIG['CAMERA_ROLL_FACTOR'] * roll_velocity)
-            self.camera_pitch_motor.setPosition(CONFIG['CAMERA_PITCH_FACTOR'] * pitch_velocity)
+            # Camera control with inverted pitch stabilization
+            dt = self.time_step / 1000.0
 
-            # Handle keyboard input
-            roll_disturbance = 0.0
-            pitch_disturbance = 0.0
-            yaw_disturbance = 0.0
+            if self.camera_stabilization_enabled:
+                # Calculate target pitch: invert drone pitch + velocity damping + manual offset
+                self.camera_target_pitch = (
+                    CONFIG['CAMERA_PITCH_STABILIZATION_GAIN'] * pitch +  # Invert drone pitch angle
+                    CONFIG['CAMERA_PITCH_FACTOR'] * pitch_velocity +      # Velocity damping
+                    self.camera_manual_pitch                              # Manual adjustment
+                )
+
+                # Smooth interpolation toward target pitch
+                smoothing_rate = 1.0 / CONFIG['CAMERA_STABILIZATION_SMOOTHING']
+                max_pitch_change = smoothing_rate * dt
+
+                pitch_diff = self.camera_target_pitch - self.camera_current_pitch
+                if abs(pitch_diff) <= max_pitch_change:
+                    self.camera_current_pitch = self.camera_target_pitch
+                else:
+                    self.camera_current_pitch += max_pitch_change if pitch_diff > 0 else -max_pitch_change
+
+                # Apply smoothed pitch and roll stabilization
+                self.camera_pitch_motor.setPosition(self.camera_current_pitch)
+                self.camera_roll_motor.setPosition(
+                    CONFIG['CAMERA_ROLL_FACTOR'] * roll_velocity + self.camera_manual_roll
+                )
+            else:
+                # Pure manual control
+                self.camera_roll_motor.setPosition(self.camera_manual_roll)
+                self.camera_pitch_motor.setPosition(self.camera_manual_pitch)
+
+            # Handle keyboard input - set target disturbances
+            self.target_roll_disturbance = 0.0
+            self.target_pitch_disturbance = 0.0
+            self.target_yaw_disturbance = 0.0
 
             key = self.keyboard.getKey()
             while key >= 0:
+                # Arrow keys - Strafe controls
                 if key == Keyboard.UP:
-                    pitch_disturbance = CONFIG['PITCH_DISTURBANCE_FORWARD']
+                    self.target_pitch_disturbance = CONFIG['PITCH_DISTURBANCE_FORWARD']
                 elif key == Keyboard.DOWN:
-                    pitch_disturbance = CONFIG['PITCH_DISTURBANCE_BACKWARD']
+                    self.target_pitch_disturbance = CONFIG['PITCH_DISTURBANCE_BACKWARD']
                 elif key == Keyboard.RIGHT:
-                    yaw_disturbance = CONFIG['YAW_DISTURBANCE_RIGHT']
+                    self.target_roll_disturbance = CONFIG['ROLL_DISTURBANCE_RIGHT']
                 elif key == Keyboard.LEFT:
-                    yaw_disturbance = CONFIG['YAW_DISTURBANCE_LEFT']
-                elif key == Keyboard.SHIFT + Keyboard.RIGHT:
-                    roll_disturbance = CONFIG['ROLL_DISTURBANCE_RIGHT']
-                elif key == Keyboard.SHIFT + Keyboard.LEFT:
-                    roll_disturbance = CONFIG['ROLL_DISTURBANCE_LEFT']
-                elif key == Keyboard.SHIFT + Keyboard.UP:
-                    self.state.target_altitude += CONFIG['ALTITUDE_INCREMENT']
-                    print(f"Target altitude: {self.state.target_altitude:.2f}m")
-                elif key == Keyboard.SHIFT + Keyboard.DOWN:
+                    self.target_roll_disturbance = CONFIG['ROLL_DISTURBANCE_LEFT']
+
+                # Numpad altitude control (multiple key codes for NumLock on/off)
+                elif key == 321 or key == ord('1'):  # Numpad 1
                     self.state.target_altitude -= CONFIG['ALTITUDE_INCREMENT']
                     print(f"Target altitude: {self.state.target_altitude:.2f}m")
-                elif key == ord('H'):
+                elif key == 323 or key == ord('3'):  # Numpad 3
+                    self.state.target_altitude += CONFIG['ALTITUDE_INCREMENT']
+                    print(f"Target altitude: {self.state.target_altitude:.2f}m")
+
+                # Numpad yaw control
+                elif key == 327 or key == ord('7'):  # Numpad 7
+                    self.target_yaw_disturbance = CONFIG['YAW_DISTURBANCE_LEFT']
+                elif key == 329 or key == ord('9'):  # Numpad 9
+                    self.target_yaw_disturbance = CONFIG['YAW_DISTURBANCE_RIGHT']
+
+                # Numpad camera pitch control
+                elif key == 322 or key == ord('2'):  # Numpad 2
+                    self.camera_manual_pitch -= CONFIG['CAMERA_MANUAL_INCREMENT']
+                    print(f"Camera pitch: {self.camera_manual_pitch:.3f} rad")
+                elif key == 328 or key == ord('8'):  # Numpad 8
+                    self.camera_manual_pitch += CONFIG['CAMERA_MANUAL_INCREMENT']
+                    print(f"Camera pitch: {self.camera_manual_pitch:.3f} rad")
+
+                # Numpad camera roll control
+                elif key == 324 or key == ord('4'):  # Numpad 4
+                    self.camera_manual_roll += CONFIG['CAMERA_MANUAL_INCREMENT']
+                    print(f"Camera roll: {self.camera_manual_roll:.3f} rad")
+                elif key == 326 or key == ord('6'):  # Numpad 6
+                    self.camera_manual_roll -= CONFIG['CAMERA_MANUAL_INCREMENT']
+                    print(f"Camera roll: {self.camera_manual_roll:.3f} rad")
+
+                # Debug: print unknown keys
+                elif key not in [Keyboard.UP, Keyboard.DOWN, Keyboard.LEFT, Keyboard.RIGHT]:
+                    if key > 0 and key < 500:  # Reasonable key range
+                        print(f"DEBUG: Unknown key pressed: {key}")
+
+                # Other commands
+                if key == ord('H'):
                     self.go_home()
                 elif key == ord('L'):
                     self.land()
 
                 key = self.keyboard.getKey()
 
-            # PID control
+            # Smooth ramping of disturbances (interpolate current toward target)
+            dt = self.time_step / 1000.0  # Convert ms to seconds
+            ramp_rate = 1.0 / CONFIG['DISTURBANCE_RAMP_TIME']  # Units per second
+
+            # Calculate maximum change allowed this frame
+            max_change = ramp_rate * dt
+
+            # Ramp roll disturbance
+            roll_diff = self.target_roll_disturbance - self.current_roll_disturbance
+            if abs(roll_diff) <= max_change:
+                self.current_roll_disturbance = self.target_roll_disturbance
+            else:
+                self.current_roll_disturbance += max_change if roll_diff > 0 else -max_change
+
+            # Ramp pitch disturbance
+            pitch_diff = self.target_pitch_disturbance - self.current_pitch_disturbance
+            if abs(pitch_diff) <= max_change:
+                self.current_pitch_disturbance = self.target_pitch_disturbance
+            else:
+                self.current_pitch_disturbance += max_change if pitch_diff > 0 else -max_change
+
+            # Ramp yaw disturbance
+            yaw_diff = self.target_yaw_disturbance - self.current_yaw_disturbance
+            if abs(yaw_diff) <= max_change:
+                self.current_yaw_disturbance = self.target_yaw_disturbance
+            else:
+                self.current_yaw_disturbance += max_change if yaw_diff > 0 else -max_change
+
+            # Use smoothed values for control
+            roll_disturbance = self.current_roll_disturbance
+            pitch_disturbance = self.current_pitch_disturbance
+            yaw_disturbance = self.current_yaw_disturbance
+
+            # PID control with damping
+            # Roll/Pitch: stronger P gain + velocity damping + disturbance input
             roll_input = CONFIG['K_ROLL_P'] * clamp(roll, -1.0, 1.0) + roll_velocity + roll_disturbance
             pitch_input = CONFIG['K_PITCH_P'] * clamp(pitch, -1.0, 1.0) + pitch_velocity + pitch_disturbance
             yaw_input = yaw_disturbance
-            clamped_difference_altitude = clamp(self.state.target_altitude - altitude + CONFIG['K_VERTICAL_OFFSET'], -1.0, 1.0)
-            vertical_input = CONFIG['K_VERTICAL_P'] * pow(clamped_difference_altitude, 3.0)
 
-            # Motor control
-            front_left_motor_input = CONFIG['K_VERTICAL_THRUST'] + vertical_input - roll_input + pitch_input - yaw_input
-            front_right_motor_input = CONFIG['K_VERTICAL_THRUST'] + vertical_input + roll_input + pitch_input + yaw_input
-            rear_left_motor_input = CONFIG['K_VERTICAL_THRUST'] + vertical_input - roll_input - pitch_input + yaw_input
-            rear_right_motor_input = CONFIG['K_VERTICAL_THRUST'] + vertical_input + roll_input - pitch_input - yaw_input
+            # Vertical: PD controller (P + D term for damping)
+            altitude_error = self.state.target_altitude - altitude + CONFIG['K_VERTICAL_OFFSET']
+            altitude_rate = (altitude - self.prev_altitude) / (self.time_step / 1000.0)  # Derivative
+            self.prev_altitude = altitude
+
+            clamped_altitude_error = clamp(altitude_error, -1.0, 1.0)
+            vertical_input = (CONFIG['K_VERTICAL_P'] * pow(clamped_altitude_error, 3.0) -
+                            CONFIG['K_VERTICAL_D'] * altitude_rate)
+
+            # Motor control with differential limiting
+            base_thrust = CONFIG['K_VERTICAL_THRUST'] + vertical_input
+
+            # Calculate raw motor commands
+            front_left_motor_input = base_thrust - roll_input + pitch_input - yaw_input
+            front_right_motor_input = base_thrust + roll_input + pitch_input + yaw_input
+            rear_left_motor_input = base_thrust - roll_input - pitch_input + yaw_input
+            rear_right_motor_input = base_thrust + roll_input - pitch_input - yaw_input
+
+            # Limit differential from base thrust to prevent overcorrection
+            max_diff = CONFIG['MAX_MOTOR_DIFFERENTIAL']
+            front_left_motor_input = clamp(front_left_motor_input, base_thrust - max_diff, base_thrust + max_diff)
+            front_right_motor_input = clamp(front_right_motor_input, base_thrust - max_diff, base_thrust + max_diff)
+            rear_left_motor_input = clamp(rear_left_motor_input, base_thrust - max_diff, base_thrust + max_diff)
+            rear_right_motor_input = clamp(rear_right_motor_input, base_thrust - max_diff, base_thrust + max_diff)
+
+            # Ensure motors stay within physical limits (positive values)
+            front_left_motor_input = max(0.1, front_left_motor_input)
+            front_right_motor_input = max(0.1, front_right_motor_input)
+            rear_left_motor_input = max(0.1, rear_left_motor_input)
+            rear_right_motor_input = max(0.1, rear_right_motor_input)
 
             self.front_left_motor.setVelocity(front_left_motor_input)
             self.front_right_motor.setVelocity(-front_right_motor_input)

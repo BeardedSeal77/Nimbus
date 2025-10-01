@@ -22,6 +22,10 @@ import signal
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+# Disable Flask/Werkzeug HTTP request logging (too noisy)
+log = logging.getLogger('werkzeug')
+log.setLevel(logging.ERROR)
+
 # Create Flask app
 app = Flask(__name__)
 
@@ -52,7 +56,8 @@ def init_shared_state():
     shared_state['detection_count'] = 0
 
     # AI configuration
-    shared_state['global_get_dist'] = 0
+    shared_state['global_get_dist'] = 1  # Depth detection enabled by default
+    shared_state['depth_method'] = 'TRIG'  # TRIG method by default
     shared_state['global_target_distance'] = 0.0
     shared_state['global_intent'] = ''
     shared_state['global_command_status'] = 'none'
@@ -193,6 +198,10 @@ def update_drone_state():
 
         _notify_sse_clients('drone/state', state)
 
+        # Also update shared state for AI worker access
+        if shared_state:
+            shared_state['drone_telemetry'] = state
+
         return {'status': 'ok'}, 200
     except Exception as e:
         logger.error(f"Update drone state error: {e}")
@@ -255,11 +264,58 @@ def set_target_object():
         target = data.get('object', 'car')
         if shared_state:
             shared_state['target_object'] = target
+            shared_state['global_object'] = target  # Also set global_object for consistency
             logger.info(f"Target object set to: {target}")
-            return {'status': 'ok', 'target_object': target}, 200
+            return {'status': 'ok', 'message': f'Target object set to {target}', 'target_object': target}, 200
         return {'status': 'error', 'message': 'Shared state not initialized'}, 500
     except Exception as e:
         logger.error(f"Set target error: {e}")
+        return {'status': 'error', 'message': str(e)}, 500
+
+@app.route('/api/set_depth_method', methods=['POST'])
+def set_depth_method():
+    """Set depth detection method (SFM or TRIG)"""
+    try:
+        data = request.get_json()
+        method = data.get('depth_method', 'TRIG')
+
+        if method not in ['SFM', 'TRIG']:
+            return {'status': 'error', 'message': 'Invalid method. Must be SFM or TRIG'}, 400
+
+        if shared_state:
+            shared_state['depth_method'] = method
+            logger.info(f"Depth method set to: {method}")
+            return {'status': 'ok', 'message': f'Depth method set to {method}', 'depth_method': method}, 200
+        return {'status': 'error', 'message': 'Shared state not initialized'}, 500
+    except Exception as e:
+        logger.error(f"Set depth method error: {e}")
+        return {'status': 'error', 'message': str(e)}, 500
+
+@app.route('/api/trigger_depth', methods=['POST'])
+def trigger_depth():
+    """Enable depth detection (TRIG runs continuously, SFM collects frames)"""
+    try:
+        if shared_state:
+            shared_state['global_get_dist'] = 1
+            method = shared_state.get('depth_method', 'TRIG')
+            logger.info(f"Depth detection enabled with method: {method}")
+            return {'status': 'ok', 'message': f'Depth detection enabled ({method} method)'}, 200
+        return {'status': 'error', 'message': 'Shared state not initialized'}, 500
+    except Exception as e:
+        logger.error(f"Trigger depth error: {e}")
+        return {'status': 'error', 'message': str(e)}, 500
+
+@app.route('/api/stop_depth', methods=['POST'])
+def stop_depth():
+    """Disable depth detection"""
+    try:
+        if shared_state:
+            shared_state['global_get_dist'] = 0
+            logger.info("Depth detection disabled")
+            return {'status': 'ok', 'message': 'Depth detection disabled'}, 200
+        return {'status': 'error', 'message': 'Shared state not initialized'}, 500
+    except Exception as e:
+        logger.error(f"Stop depth error: {e}")
         return {'status': 'error', 'message': str(e)}, 500
 
 @app.route('/api/ai_status', methods=['GET'])
@@ -282,6 +338,126 @@ def get_ai_status():
         logger.error(f"AI status error: {e}")
         return {'status': 'error', 'message': str(e)}, 500
 
+@app.route('/api/debug/drone_telemetry', methods=['GET'])
+def get_drone_telemetry_debug():
+    """Debug endpoint to view full drone telemetry including world_objects"""
+    try:
+        if shared_state:
+            drone_telemetry = shared_state.get('drone_telemetry', {})
+            return jsonify(drone_telemetry), 200
+        return {'status': 'error', 'message': 'Shared state not initialized'}, 500
+    except Exception as e:
+        logger.error(f"Debug telemetry error: {e}")
+        return {'status': 'error', 'message': str(e)}, 500
+
+@app.route('/api/debug/depth_status', methods=['GET'])
+def get_depth_status_debug():
+    """Debug endpoint to view depth detection status and calculated distance"""
+    try:
+        if shared_state:
+            # Get drone telemetry
+            drone_telemetry = shared_state.get('drone_telemetry', {})
+            drone_pos = drone_telemetry.get('position', {})
+            world_objects = drone_telemetry.get('world_objects', {})
+
+            # Get target object
+            target_object = shared_state.get('global_object', 'car')
+
+            # Simple mapping for webots name
+            mapping = {'car': 'car', 'person': 'human', 'bench': 'bench', 'bottle': 'cardboard_box', 'cabinet': 'cabinet'}
+            webots_name = mapping.get(target_object.lower(), target_object.lower())
+
+            # Get object data
+            object_data = world_objects.get(webots_name, {}) if webots_name else {}
+            object_pos = object_data.get('position', {})
+
+            # Calculate distance manually for verification
+            calculated_distance = None
+            distance_components = None
+            if drone_pos and object_pos:
+                try:
+                    dx = float(object_pos.get('x', 0)) - float(drone_pos.get('x', 0))
+                    dy = float(object_pos.get('y', 0)) - float(drone_pos.get('y', 0))
+                    dz = float(object_pos.get('z', 0)) - float(drone_pos.get('z', 0))
+                    calculated_distance = (dx**2 + dy**2 + dz**2) ** 0.5
+                    distance_components = {'dx': dx, 'dy': dy, 'dz': dz}
+                except Exception as calc_err:
+                    distance_components = {'error': str(calc_err)}
+
+            status = {
+                'depth_enabled': shared_state.get('global_get_dist', 0) == 1,
+                'depth_method': shared_state.get('depth_method', 'TRIG'),
+                'target_object_yolo': target_object,
+                'target_object_webots': webots_name,
+                'target_distance_stored': shared_state.get('global_target_distance', 0.0),
+                'calculated_distance_now': calculated_distance,
+                'distance_components': distance_components,
+                'depth_processing_busy': shared_state.get('depth_processing_busy', False),
+                'object_detection_busy': shared_state.get('object_detection_busy', False),
+                'successful_detection_counter': shared_state.get('successful_detection_counter', 0),
+                'detection_count': shared_state.get('detection_count', 0),
+                'drone_position': drone_pos,
+                'object_position': object_pos,
+                'object_type': object_data.get('type') if object_data else None,
+                'available_objects': list(world_objects.keys()) if world_objects else [],
+                'has_drone_telemetry': bool(drone_telemetry),
+                'has_world_objects': bool(world_objects),
+                'object_found_in_world': webots_name in world_objects if world_objects else False
+            }
+            return jsonify(status), 200
+        return {'status': 'error', 'message': 'Shared state not initialized'}, 500
+    except Exception as e:
+        logger.error(f"Debug depth status error: {e}")
+        return {'status': 'error', 'message': str(e)}, 500
+
+@app.route('/api/status', methods=['GET'])
+def get_system_status():
+    """Get overall system status (for web page)"""
+    try:
+        status = {
+            'hub': {
+                'active_topics': len(_topics),
+                'sse_clients': len(_sse_clients)
+            }
+        }
+
+        if shared_state:
+            status['ai_worker'] = {
+                'running': shared_state.get('ai_running', False),
+                'heartbeat_age': time.time() - shared_state.get('last_heartbeat', 0),
+                'processing_fps': shared_state.get('processing_fps', 0.0),
+                'detection_count': shared_state.get('detection_count', 0)
+            }
+
+            # Include all global state variables for web interface
+            status['global_object'] = shared_state.get('global_object', 'car')
+            status['global_get_dist'] = shared_state.get('global_get_dist', 0)
+            status['global_target_distance'] = shared_state.get('global_target_distance', 0.0)
+            status['depth_processing_busy'] = shared_state.get('depth_processing_busy', False)
+            status['depth_method'] = shared_state.get('depth_method', 'TRIG')  # SFM or TRIG
+            status['depth_frame_count'] = shared_state.get('depth_frame_count', 5)
+            status['reference_frame_position'] = shared_state.get('reference_frame_position', 10)
+            status['frame_processing_interval_ms'] = shared_state.get('frame_processing_interval_ms', 100)
+            status['ros2_host'] = shared_state.get('ros2_host', 'localhost')
+            status['ros2_port'] = shared_state.get('ros2_port', 9090)
+            status['global_intent'] = shared_state.get('global_intent', '')
+            status['global_state_active'] = shared_state.get('global_state_active', False)
+            status['global_command_status'] = shared_state.get('global_command_status', 'none')
+
+        # Get drone telemetry
+        with _topics_lock:
+            drone_state = _topics.get('drone/state', {}).get('data')
+            if drone_state:
+                status['drone'] = {
+                    'connected': drone_state.get('connected', False),
+                    'mode': drone_state.get('mode', 'UNKNOWN')
+                }
+
+        return jsonify(status), 200
+    except Exception as e:
+        logger.error(f"System status error: {e}")
+        return {'status': 'error', 'message': str(e)}, 500
+
 # ============================================================================
 # VIDEO STREAMING
 # ============================================================================
@@ -290,11 +466,25 @@ def get_ai_status():
 def video_feed():
     """MJPEG video stream from AI processing"""
     def generate():
+        import numpy as np
+        import cv2
+
+        # Create placeholder frame
+        placeholder = np.zeros((480, 640, 3), dtype=np.uint8)
+        cv2.putText(placeholder, 'Waiting for video...', (150, 240),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+        ret, placeholder_jpeg = cv2.imencode('.jpg', placeholder)
+        placeholder_bytes = placeholder_jpeg.tobytes()
+
         while True:
             if shared_state and shared_state.get('video_frame'):
                 frame = shared_state['video_frame']
                 yield (b'--frame\r\n'
                        b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
+            else:
+                # Send placeholder if no video yet
+                yield (b'--frame\r\n'
+                       b'Content-Type: image/jpeg\r\n\r\n' + placeholder_bytes + b'\r\n')
             time.sleep(0.033)  # ~30 FPS
 
     return Response(generate(), mimetype='multipart/x-mixed-replace; boundary=frame')
@@ -397,8 +587,14 @@ def signal_handler(sig, frame):
     stop_ai_worker()
     sys.exit(0)
 
-signal.signal(signal.SIGINT, signal_handler)
-signal.signal(signal.SIGTERM, signal_handler)
+def init_signal_handlers():
+    """Initialize signal handlers (only in main thread)"""
+    try:
+        signal.signal(signal.SIGINT, signal_handler)
+        signal.signal(signal.SIGTERM, signal_handler)
+    except ValueError:
+        # Not in main thread, skip signal registration
+        pass
 
 # ============================================================================
 # STARTUP
@@ -434,6 +630,9 @@ if __name__ == '__main__':
     logger.info("=" * 60)
 
     try:
+        # Initialize signal handlers
+        init_signal_handlers()
+
         # Initialize shared state
         init_shared_state()
 

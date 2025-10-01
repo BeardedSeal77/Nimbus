@@ -1,0 +1,16 @@
+ED:
+
+I got an even better idea, we make the trig work off of the object detection as well, and since it will be simple maths, we can run it permanently.
+
+all the trig needs is latest from each:
+drone position
+drone angle
+camera position (which is always an exact offset from drone)
+camera angle (not sure, I havent tested rotating the camera yet)
+and then the bounding box x and y in frame
+
+this gives us a point in space (the centre of the camera) and a vector pointing at the object (components of drone rotation, camera rotation and BB x and y)
+
+so we have a point and vector, this calculation runs with every object detection frame, calculate the intersection (this might be hard because the intersection might be infinite... we arent working with perfect numbers here...) and average the last 5...
+
+we know where the drone is in space, and we know where the object is in space, this should tell us exactly how far the object is...

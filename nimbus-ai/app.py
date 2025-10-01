@@ -10,6 +10,7 @@ import sys
 import time
 import logging
 import traceback
+import threading
 
 # Add project paths
 project_root = os.path.dirname(os.path.abspath(__file__))
@@ -62,6 +63,9 @@ def run_ai_worker(shared_state):
                     # Processing Flags
                     'OBJECT_DETECTION_BUSY': False,
                     'DEPTH_PROCESSING_BUSY': False,
+
+                    # Thread Safety
+                    'STATE_LOCK': threading.Lock(),
 
                     # Video Source Configuration
                     'USE_ROS2_VIDEO': False,  # Use direct HTTP
@@ -155,12 +159,18 @@ def run_ai_worker(shared_state):
 
                 # Get latest processed frame for video streaming
                 try:
-                    if hasattr(display_service, 'get_latest_frame'):
-                        frame_data = display_service.get_latest_frame()
-                        if frame_data:
-                            shared_state['video_frame'] = frame_data
+                    # Get PROCESSED display frame (with overlays, bounding boxes, etc.)
+                    if hasattr(display_service, 'display_service_instance'):
+                        display_inst = display_service.display_service_instance
+                        with display_inst.frame_lock:
+                            if display_inst.current_display_frame is not None:
+                                # Encode processed frame as JPEG for streaming
+                                import cv2
+                                ret, jpeg = cv2.imencode('.jpg', display_inst.current_display_frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+                                if ret:
+                                    shared_state['video_frame'] = jpeg.tobytes()
                 except Exception as e:
-                    logger.debug(f"Error getting video frame: {e}")
+                    logger.debug(f"Error encoding video frame: {e}")
 
                 # Small sleep to prevent CPU hammering
                 time.sleep(0.01)  # 100Hz loop

@@ -1,4 +1,14 @@
 @echo off
+setlocal EnableDelayedExpansion
+
+REM Disable Ctrl+C prompt
+if "%1"=="CHILD" goto :CHILD
+
+REM Start as child process to disable Ctrl+C prompt
+cmd /c ""%~f0" CHILD %*"
+exit /b
+
+:CHILD
 REM Start Nimbus Central Communication Hub
 
 echo ==========================================
@@ -25,6 +35,11 @@ pip install -r requirements.txt
 REM Start the hub
 echo.
 echo Starting Nimbus Hub...
-python hub.py
+echo Web Interface will open at: http://localhost:5000
+echo.
 
-pause
+REM Open web browser after 5 seconds (gives server time to start)
+start "" cmd /c "timeout /t 5 /nobreak > nul && start http://localhost:5000"
+
+REM Start the hub
+python hub.py
