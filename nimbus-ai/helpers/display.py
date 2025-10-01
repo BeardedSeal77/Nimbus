@@ -113,11 +113,18 @@ class ProcessedDisplay:
                 cv2.putText(frame, label_text, (x, y - 5), self.font, 0.6,
                            self.colors['text'], 1)
         
-        # Simple clean overlay: Target and Distance only
+        # Simple clean overlay: Intent, Target and Distance
+        intent = ai_result.get('intent', '')
         target_object = ai_result.get('target_object', '')
         target_distance = ai_result.get('target_distance')
 
         y_pos = 150
+
+        # Intent
+        if intent:
+            cv2.putText(frame, f"Intent: {intent}", (10, y_pos),
+                       self.font, 0.7, self.colors['info'], 2)
+            y_pos += 30
 
         # Target
         if target_object:

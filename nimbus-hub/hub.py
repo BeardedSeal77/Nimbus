@@ -63,6 +63,10 @@ def init_shared_state():
     shared_state['global_command_status'] = 'none'
     shared_state['global_state_active'] = False
 
+    # Audio configuration
+    shared_state['audio_recording'] = False
+    shared_state['audio_process_trigger'] = False
+
     logger.info("Shared state initialized")
 
 # ============================================================================
@@ -316,6 +320,46 @@ def stop_depth():
         return {'status': 'error', 'message': 'Shared state not initialized'}, 500
     except Exception as e:
         logger.error(f"Stop depth error: {e}")
+        return {'status': 'error', 'message': str(e)}, 500
+
+@app.route('/api/audio/start', methods=['POST'])
+def start_audio_recording():
+    """Start audio recording from microphone"""
+    try:
+        if not ai_process or not ai_process.is_alive():
+            return {'status': 'error', 'message': 'AI worker not running'}, 500
+
+        shared_state['audio_recording'] = True
+        logger.info("Audio recording started")
+        return {'status': 'ok', 'message': 'Recording started'}, 200
+    except Exception as e:
+        logger.error(f"Start audio error: {e}")
+        return {'status': 'error', 'message': str(e)}, 500
+
+@app.route('/api/audio/stop', methods=['POST'])
+def stop_audio_recording():
+    """Stop audio recording and process through STT + intent extraction"""
+    try:
+        if not ai_process or not ai_process.is_alive():
+            return {'status': 'error', 'message': 'AI worker not running'}, 500
+
+        shared_state['audio_recording'] = False
+        shared_state['audio_process_trigger'] = True
+
+        timeout = 10.0
+        start_time = time.time()
+
+        while time.time() - start_time < timeout:
+            if 'audio_result' in shared_state:
+                result = dict(shared_state['audio_result'])
+                del shared_state['audio_result']
+                logger.info(f"Audio processing complete: {result}")
+                return {'status': 'ok', 'result': result}, 200
+            time.sleep(0.1)
+
+        return {'status': 'error', 'message': 'Audio processing timeout'}, 500
+    except Exception as e:
+        logger.error(f"Stop audio error: {e}")
         return {'status': 'error', 'message': str(e)}, 500
 
 @app.route('/api/ai_status', methods=['GET'])

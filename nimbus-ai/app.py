@@ -35,6 +35,7 @@ def run_ai_worker(shared_state):
     try:
         # Import services
         from services import ai_service, ros2_service, display_service, video_stream_service
+        from services.audio_service import AudioService
 
         logger.info("Services imported successfully")
 
@@ -113,6 +114,11 @@ def run_ai_worker(shared_state):
             display_service.start_service(worker_config)
             logger.info("Display service started")
 
+        # Initialize audio service
+        audio_service_instance = AudioService()
+        audio_service_instance.initialize(worker_config)
+        logger.info("Audio service initialized")
+
         logger.info("All services started successfully")
         logger.info("Entering main processing loop...")
 
@@ -133,10 +139,23 @@ def run_ai_worker(shared_state):
                     continue
 
                 # Sync configuration from shared state
-                worker_config['GLOBAL_OBJECT'] = shared_state.get('target_object', 'car')
+                # Read from both 'global_object' (audio) and 'target_object' (web UI)
+                worker_config['GLOBAL_OBJECT'] = shared_state.get('global_object', shared_state.get('target_object', 'car'))
                 worker_config['GLOBAL_INTENT'] = shared_state.get('global_intent', '')
                 worker_config['GLOBAL_GET_DIST'] = shared_state.get('global_get_dist', 0)
                 worker_config['mode'] = shared_state.get('mode', 'MANUAL')
+
+                # Handle audio recording control
+                if shared_state.get('audio_recording', False) and not audio_service_instance.recording:
+                    audio_service_instance.start_recording()
+                elif not shared_state.get('audio_recording', False) and audio_service_instance.recording:
+                    pass
+
+                # Handle audio processing trigger
+                if shared_state.get('audio_process_trigger', False):
+                    shared_state['audio_process_trigger'] = False
+                    result = audio_service_instance.stop_recording()
+                    shared_state['audio_result'] = result
 
                 # Calculate FPS
                 frame_count += 1

@@ -137,6 +137,8 @@ class AudioService:
                         self.app.config['GLOBAL_OBJECT'] = result['object']
                         if hasattr(self.app, 'shared_state'):
                             self.app.shared_state['global_object'] = result['object']
+                            # Also update target_object for UI display
+                            self.app.shared_state['target_object'] = result['object']
 
                 logger.info(f"Updated globals: intent='{result['intent']}', object='{result['object']}'")
 

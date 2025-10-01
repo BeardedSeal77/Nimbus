@@ -420,6 +420,9 @@ class AIService:
     def _update_detection_result(self, result):
         """Update detection result (thread-safe)"""
         with self.detection_result_lock:
+            # Always include current intent and target object
+            result['intent'] = self.app.config.get('GLOBAL_INTENT', '')
+            result['target_object'] = self.app.config.get('GLOBAL_OBJECT', 'car')
             self.latest_detection_result = result
 
 # Global service instance

@@ -64,6 +64,21 @@
                             Click "Refresh Status" to load current system state...
                         </div>
                     </div>
+
+                    <div class="variable-group">
+                        <h3>🎤 Voice Command Control</h3>
+                        <div class="button-group">
+                            <button id="audio-record-btn" class="btn-primary" onclick="startAudioRecording()">
+                                🎤 Start Recording
+                            </button>
+                            <button id="audio-stop-btn" class="btn-danger" onclick="stopAudioRecording()" disabled>
+                                🛑 Stop Recording
+                            </button>
+                        </div>
+                        <div id="audio-status" class="status-display">
+                            Click "Start Recording" to record a voice command...
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Advanced Settings -->

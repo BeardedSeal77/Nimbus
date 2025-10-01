@@ -282,3 +282,80 @@ function showMessage(message, type) {
         messageDiv.remove();
     }, 5000);
 }
+
+// Audio Recording Functions
+async function startAudioRecording() {
+    const recordBtn = document.getElementById('audio-record-btn');
+    const stopBtn = document.getElementById('audio-stop-btn');
+    const statusDiv = document.getElementById('audio-status');
+
+    try {
+        const response = await fetch('/api/audio/start', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        const data = await response.json();
+
+        if (data.status === 'ok') {
+            recordBtn.disabled = true;
+            stopBtn.disabled = false;
+            statusDiv.innerHTML = '<span style="color: red;">🔴 Recording in progress...</span>';
+            statusDiv.style.background = '#fff3cd';
+        } else {
+            statusDiv.innerHTML = `<span style="color: red;">Error: ${data.message}</span>`;
+        }
+    } catch (error) {
+        statusDiv.innerHTML = `<span style="color: red;">Error: ${error.message}</span>`;
+    }
+}
+
+async function stopAudioRecording() {
+    const recordBtn = document.getElementById('audio-record-btn');
+    const stopBtn = document.getElementById('audio-stop-btn');
+    const statusDiv = document.getElementById('audio-status');
+
+    stopBtn.disabled = true;
+    statusDiv.innerHTML = '<span style="color: orange;">⏳ Processing audio...</span>';
+
+    try {
+        const response = await fetch('/api/audio/stop', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        const data = await response.json();
+
+        if (data.status === 'ok') {
+            const result = data.result;
+
+            if (result.success) {
+                statusDiv.innerHTML = `
+                    <div style="color: green; font-weight: bold;">✅ Audio Processed Successfully</div>
+                    <div style="margin-top: 5px;">
+                        <strong>Transcript:</strong> "${result.transcript}"<br>
+                        <strong>Intent:</strong> ${result.intent || 'none'}<br>
+                        <strong>Object:</strong> ${result.object || 'none'}
+                    </div>
+                `;
+                statusDiv.style.background = '#d4edda';
+                showMessage(`Voice command processed: ${result.intent} ${result.object}`, 'success');
+
+                // Refresh status to show updated globals
+                setTimeout(refreshStatus, 500);
+            } else {
+                statusDiv.innerHTML = `<span style="color: red;">❌ Error: ${result.error}</span>`;
+                statusDiv.style.background = '#f8d7da';
+            }
+        } else {
+            statusDiv.innerHTML = `<span style="color: red;">Error: ${data.message}</span>`;
+            statusDiv.style.background = '#f8d7da';
+        }
+    } catch (error) {
+        statusDiv.innerHTML = `<span style="color: red;">Error: ${error.message}</span>`;
+        statusDiv.style.background = '#f8d7da';
+    } finally {
+        recordBtn.disabled = false;
+        stopBtn.disabled = true;
+    }
+}
