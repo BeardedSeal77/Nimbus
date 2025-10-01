@@ -44,10 +44,12 @@ class AIService:
         # Counters
         self.detection_counter = 0
         self.successful_detection_counter = 0  # Only successful object detections
+        self.detection_history = []  # Sliding window of last 10 detection results (True/False)
         
     def reset_depth_collection(self):
         """Reset depth collection when triggered from web interface"""
         self.successful_detection_counter = 0
+        self.detection_history = []
         if self.depth_estimator:
             self.depth_estimator.reset_collection()
         logger.info("Depth collection reset for new cycle")
@@ -156,9 +158,16 @@ class AIService:
 
             if detection_result:  # Object found
                 self.detection_counter += 1
-                self.successful_detection_counter += 1  # Count successful detections
 
-                logger.info(f"✓ DETECTED {target_object} - Counter: {self.successful_detection_counter}, get_dist: {self.app.config['GLOBAL_GET_DIST']}")
+                # Update sliding window: add successful detection
+                self.detection_history.append(True)
+                if len(self.detection_history) > 10:
+                    self.detection_history.pop(0)  # Keep only last 10
+
+                # Count successful detections in last 10 attempts
+                self.successful_detection_counter = sum(self.detection_history)
+
+                logger.info(f"✓ DETECTED {target_object} - Last 10: {self.successful_detection_counter}/10, get_dist: {self.app.config['GLOBAL_GET_DIST']}")
 
                 # Update shared state with counter for debugging (update hub's shared_state!)
                 with self.app.config['STATE_LOCK']:
@@ -184,13 +193,16 @@ class AIService:
                 self._handle_depth_processing(frame, detection_result, detection_data)
                 logger.info(f"← Returned from _handle_depth_processing")
             else:
-                # No object found - increment total counter but not successful counter
+                # No object found - increment total counter
                 self.detection_counter += 1
 
-                # Only reset counter if depth detection is not active
-                # When depth is active, allow occasional misses (don't reset immediately)
-                if self.app.config['GLOBAL_GET_DIST'] != 1:
-                    self.successful_detection_counter = 0
+                # Update sliding window: add failed detection
+                self.detection_history.append(False)
+                if len(self.detection_history) > 10:
+                    self.detection_history.pop(0)  # Keep only last 10
+
+                # Count successful detections in last 10 attempts
+                self.successful_detection_counter = sum(self.detection_history)
 
                 # Update shared state
                 with self.app.config['STATE_LOCK']:
@@ -298,10 +310,10 @@ class AIService:
                 depth_result = self._calculate_trig_depth(target_object)
 
                 if depth_result:
-                    logger.info(f"TRIG depth calculated: {depth_result['distance']:.2f}m, counter={self.successful_detection_counter}/5")
+                    logger.info(f"TRIG depth calculated: {depth_result['distance']:.2f}m, counter={self.successful_detection_counter}/10")
 
-                    # Require 5 successful detections before reporting distance
-                    if self.successful_detection_counter >= 5:
+                    # Require 10 successful detections before reporting distance
+                    if self.successful_detection_counter >= 10:
                         with self.app.config['STATE_LOCK']:
                             self.app.config['GLOBAL_TARGET_DISTANCE'] = depth_result['distance']
                             # Update hub's shared state
@@ -318,12 +330,12 @@ class AIService:
                         })
                     else:
                         # Still collecting confirmations
-                        logger.info(f"TRIG collecting confirmations: {self.successful_detection_counter}/5")
+                        logger.info(f"TRIG collecting confirmations: {self.successful_detection_counter}/10")
                         self._update_detection_result({
                             'bounding_box': detection_data,
                             'processing_status': 'collecting_depth_frames',
                             'current_detection_number': self.successful_detection_counter,
-                            'required_detections': 5
+                            'required_detections': 10
                         })
                     return
                 else:

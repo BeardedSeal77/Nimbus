@@ -10,5 +10,9 @@ ultralytics==8.3.203
 transformers==4.56.2
 faster-whisper==1.2.0
 
+# Audio Dependencies
+soundfile==0.13.1
+pyaudio==0.2.14
+
 # WebSocket for ROS2
 websocket-client==1.8.0
