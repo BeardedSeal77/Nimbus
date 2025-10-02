@@ -73,7 +73,7 @@ class TelemetryForwarder:
                 return
 
         # Only forward if detections increased by >= 15
-        if detection_count - self.last_detection_count >= 15:
+        if detection_count - self.last_detection_count >= 100:
             x, y, z = pos.get("x", 0.0), pos.get("y", 0.0), pos.get("z", 0.0)
             unique_key = (label, (x, y, z))
 
