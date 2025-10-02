@@ -247,6 +247,42 @@ def send_control_command():
 # AI CONTROL ENDPOINTS
 # ============================================================================
 
+@app.route('/api/target_status', methods=['GET'])
+def get_target_status():
+    target = shared_state.get('target_object')
+    telemetry = shared_state.get('drone_telemetry', {})
+    world_objects = telemetry.get('world_objects', {})
+
+    if not target:
+        return {"status": "error", "message": target}, 400
+    
+    mapping = {
+        'car': 'car',
+        'person': 'human',
+        'bench': 'bench',
+        'bottle': 'cardboard_box',
+        'cabinet': 'cabinet'
+    }
+    webots_name = mapping.get(target.lower(), target.lower())
+
+    obj = world_objects[webots_name]
+    if not obj:
+        return {"status": "error", "message": f"{target} not found"}, 404
+    
+    position = obj.get("position", {})
+    detection_count = shared_state.get('detection_count')
+
+    return {
+        "status": "ok",
+        "target": target,
+        "detection_count": detection_count,
+        "position": {
+            "x": position.get("x", 0.0),
+            "y": position.get("y", 0.0),
+            "z": position.get("z", 0.0)
+        }
+    }
+
 @app.route('/api/cancel', methods=['POST'])
 def cancel_processing():
     """Cancel AI processing"""
