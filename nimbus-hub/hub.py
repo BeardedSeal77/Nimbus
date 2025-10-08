@@ -81,6 +81,16 @@ _topics_lock = threading.Lock()
 _sse_clients = []
 _sse_lock = threading.Lock()
 
+@app.route('/api/debug/ai_state', methods=['GET'])
+def get_ai_state():
+    """Return only relevant AI state for debugging"""
+    if shared_state:
+        return jsonify({
+            'ai_results': shared_state.get('ai_results', {}),
+        }), 200
+    return {'status': 'error', 'message': 'Shared state not initialized'}, 500
+
+
 @app.route('/publish', methods=['POST'])
 def publish():
     """Publish data to a topic"""
