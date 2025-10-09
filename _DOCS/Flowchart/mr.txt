@@ -1,0 +1,77 @@
+flowchart TD
+
+%% -------------------------
+%% PYTHON SIDE
+%% -------------------------
+subgraph Python_Side[🐍 Python Side]
+    A1[Drone Telemetry<br/>x,y,z coordinates every 200ms]
+    A2[Object Detection<br/>label + coords]
+    A3[System Status<br/>Ready, Error, Battery]
+    A4[Video Stream<br/>Tello / Recording / Dummy]
+    A5[Yaw Data Stream<br/>getYaw.py]
+    A6[JSON Serializer]
+    A7[TCP Socket Sender]
+
+    A1 --> A6
+    A2 --> A6
+    A3 --> A6 --> A7
+end
+
+%% -------------------------
+%% UNITY SIDE
+%% -------------------------
+subgraph Unity_Side[🎮 Unity Side]
+    B1[DetectionServer.cs<br/>TCP Listener + JSON Parser]
+    B2[MainThreadDispatcher.cs<br/>Thread → Unity Main Thread]
+
+    subgraph Visualization
+        B3[SpawnMarker System<br/>Instantiate DetectionMarker prefab]
+        B4[DetectionMarker Prefab<br/>Cube + TextMeshPro label]
+        B5[HUD Overlay<br/>Labels facing camera]
+
+        %% ---- Minimap System ----
+        subgraph Minimap[🗺 Minimap System]
+            B6[Path Drawer<br/>LineRenderer → Drone trajectory]
+            B7[Drone Icon<br/>2D marker for current position]
+            B8[Detection Pins<br/>Minimap prefab for object detections]
+            B9[Coordinate Updater<br/>Maps x,y to minimap space]
+        end
+
+        B10[HUD Message System<br/>Drone status + errors]
+        B11[VideoReceiver.cs<br/>Displays drone video in RawImage UI]
+    end
+
+    subgraph Control
+        B12[Yaw Listener Unity → Python]
+        B13[Yaw-based Drone Rotation]
+    end
+
+    B1 --> B2
+    B2 --> B3 --> B4 --> B5
+    B2 --> Minimap
+    B2 --> B10
+end
+
+%% -------------------------
+%% CONNECTIONS
+%% -------------------------
+A7 -- JSON via TCP: Detections & Status --> B1
+A4 -- Raw Frames via TCP9999 --> B11
+A5 -- Yaw data via TCP9998 --> B12 --> B13
+
+%% -------------------------
+%% STYLING
+%% -------------------------
+classDef python fill:#3572A5,stroke:#1f2e3d,stroke-width:2px,color:#fff;
+classDef unity fill:#4b69c5,stroke:#2b3a70,stroke-width:2px,color:#fff;
+classDef viz fill:#27ae60,stroke:#145a32,stroke-width:2px,color:#fff;
+classDef control fill:#e67e22,stroke:#7e3b00,stroke-width:2px,color:#fff;
+classDef data fill:#f1c40f,stroke:#7d6608,stroke-width:2px,color:#000;
+classDef minimap fill:#16a085,stroke:#0e6251,stroke-width:2px,color:#fff;
+
+class A1,A2,A3,A4,A5,A6,A7 python
+class B1,B2 unity
+class B3,B4,B5,B10,B11 viz
+class B12,B13 control
+class A7,A4,A5 data
+class B6,B7,B8,B9 minimap

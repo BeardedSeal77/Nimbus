@@ -1,0 +1,72 @@
+flowchart LR
+    subgraph Input["1. INPUT: User says 'go to the chair'"]
+        direction TB
+        Space1[" "]
+        Mic["Microphone captures audio"]
+        Drone["Drone flying + streaming video"]
+    end
+
+    subgraph AI["2. AI BRANCH: Audio + Vision Processing"]
+        direction TB
+        Space2[" "]
+        Audio["Audio Pipeline"]
+        STT["Speech-to-Text: 'go to the chair'"]
+        LLM["LLM extracts:<br/>Intent: GO<br/>Object: CHAIR"]
+
+        Video["Video Pipeline"]
+        ObjDet["Object Detection:<br/>Finds 'chair' in frame"]
+        Depth["Depth Detection:<br/>Distance to chair"]
+        BBox["Bounding Box:<br/>X,Y position of chair"]
+    end
+
+    subgraph Hub["3. CENTRAL HUB: Data Integration"]
+    
+        Store["Global Variables:<br/>- Intent: GO<br/>- Object: CHAIR<br/>- Distance: 3.2m<br/>- Position: X=320, Y=240"]
+    end
+
+    subgraph Robotics["4. ROBOTICS BRANCH: Motion Control"]
+        direction TB
+        Space4[" "]
+        PID["PID Controller calculates:<br/>- Direction to object<br/>- Speed adjustments<br/>- Approach distance"]
+        DroneCmd["Drone Movement Commands"]
+    end
+
+    subgraph MR["5. MR BRANCH: Visualization"]
+        direction TB
+        Space5[" "]
+        Display["Unity displays:<br/>- Processed video with bounding box<br/>- Distance overlay<br/>- Minimap with path<br/>- Status: 'Moving to chair'"]
+    end
+
+    Mic --> Audio
+    Drone --> Video
+
+    Audio --> STT --> LLM
+    Video --> ObjDet --> Depth
+    ObjDet --> BBox
+
+    LLM --> Store
+    BBox --> Store
+    Depth --> Store
+
+    Store --> PID
+    Store --> Display
+
+    PID --> DroneCmd
+    DroneCmd -.->|Telemetry feedback| Store
+
+    classDef inputStyle fill:#90E24A,stroke:#5C8A2E,stroke-width:3px,color:#000
+    classDef aiStyle fill:#E2904A,stroke:#8A5C2E,stroke-width:3px,color:#fff
+    classDef hubStyle fill:#4A90E2,stroke:#2E5C8A,stroke-width:3px,color:#fff
+    classDef roboticsStyle fill:#E24A90,stroke:#8A2E5C,stroke-width:3px,color:#fff
+    classDef mrStyle fill:#9B4AE2,stroke:#5C2E8A,stroke-width:3px,color:#fff
+
+    class Mic,Drone inputStyle
+    class Audio,STT,LLM,Video,ObjDet,Depth,BBox aiStyle
+    class Store hubStyle
+    class PID,DroneCmd roboticsStyle
+    class Display mrStyle
+
+    style Space1 fill:transparent,stroke:none
+    style Space2 fill:transparent,stroke:none
+    style Space4 fill:transparent,stroke:none
+    style Space5 fill:transparent,stroke:none

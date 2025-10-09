@@ -1,0 +1,18 @@
+stateDiagram-v2
+    state "Central Hub (ROS2/Python)" as Hub
+    state "Simulation/Drone" as SimDrone
+    state "AI Process" as AI
+    state "Mixed Reality (MR)" as MR
+    state "Robotics" as Robotics
+    
+    SimDrone --> Hub: Raw Video<br/>Drone Position
+    Hub --> SimDrone: PID Translation
+    
+    Hub --> AI: Raw Video<br/>Audio
+    AI --> Hub: Processed Video<br/>Distance to Object<br/>Bounding Box X & Y
+    
+    MR --> Hub: Audio
+    Hub --> MR: Processed Video
+    
+    Robotics --> Hub: PID Translation<br/>for Drone
+    Hub --> Robotics: Drone Position<br/>Distance to Object<br/>Bounding Box X & Y

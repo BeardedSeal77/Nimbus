@@ -1,0 +1,78 @@
+---
+config:
+  theme: default
+  look: classic
+  layout: fixed
+---
+flowchart LR
+ subgraph HW["Hardware / External"]
+        Camera["Camera"]
+        IMU["IMU / GPS / Sensors"]
+        WebUI["Python Web UI"]
+        PCRecord["PC Recording / Sim Video"]
+  end
+ subgraph PROC["Processing — Drone (Python)"]
+    direction TB
+        DV["DroneVideoPublisher\n(drone_video_publisher.py)"]
+        DN["DroneNode\n(drone_node.py)"]
+        YawSrv["Yaw Server (optional)"]
+        SysGen["System Status Generator\n(status, telemetry tracker)"]
+  end
+ subgraph ROS["ROS Topics / Messages"]
+    direction TB
+        TOP_CMD["/drone_command\n(std_msgs/String)"]
+        TOP_STATUS["/drone_status\n(std_msgs/String)"]
+        TOP_POS["/mavros/setpoint_position/local\n(PoseStamped)"]
+        TOP_CMDLONG["/mavros/cmd/command\n(CommandLong)"]
+        TOP_VIDEO["/drone_video\n(Image / base64 payload)"]
+        SVC_ARM["/mavros/cmd/arming (service)"]
+  end
+ subgraph MR["MR / Visualization"]
+    direction TB
+        MRVideo["MR Video Receiver\n(subscribes /drone_video)"]
+        MRPos["MR Position Receiver\n(subscribes /mavros/setpoint_position/local)"]
+        MRStatus["MR HUD / Message System\n(subscribes /drone_status)"]
+  end
+    Camera --> DV
+    IMU --> DN
+    PCRecord --> DV
+    WebUI --> TOP_CMD
+    DV --> TOP_VIDEO
+    DN --> TOP_STATUS & TOP_POS & TOP_CMDLONG & SVC_ARM & TOP_CMD
+    SysGen --> TOP_STATUS
+    YawSrv --> DN
+    TOP_VIDEO --> MRVideo
+    TOP_POS --> MRPos
+    TOP_STATUS --> MRStatus
+    DN --- Note1["DroneNode responsibilities:\n• command_callback (goto x y, green_light)\n• arm_drone\n• rotate / move_forward / move\n• publish position, status, CommandLong"]
+    DV --- Note2["DroneVideoPublisher responsibilities:\n• capture frames\n• encode JPEG -> base64\n• publish to /drone_video (~30FPS)"]
+    Camera@{ shape: rect}
+    IMU@{ shape: rect}
+    WebUI@{ shape: rect}
+    PCRecord@{ shape: rect}
+     Note1:::note
+     Note2:::note
+    classDef note fill:#f9f,stroke:#333,stroke-width:1px
+    style Camera stroke:#000000,fill:#00C853,color:#FFFFFF
+    style IMU stroke:#000000,fill:#00C853,color:#FFFFFF
+    style WebUI stroke:#000000,fill:#00C853,color:#FFFFFF
+    style PCRecord stroke:#000000,fill:#00C853,color:#FFFFFF
+    style DV fill:#BBDEFB,stroke:#000000
+    style DN fill:#BBDEFB,stroke:#000000
+    style YawSrv stroke:#000000,fill:#BBDEFB
+    style SysGen stroke:#000000,fill:#BBDEFB
+    style TOP_CMD stroke:#000000,fill:#FFF9C4
+    style TOP_STATUS stroke:#000000,fill:#FFF9C4
+    style TOP_POS stroke:#000000,fill:#FFF9C4
+    style TOP_CMDLONG stroke:#000000,fill:#FFF9C4
+    style TOP_VIDEO stroke:#000000,fill:#FFF9C4
+    style SVC_ARM fill:#FFF9C4,stroke:#000000
+    style MRVideo stroke:#000000,fill:#FFCDD2
+    style MRPos fill:#FFCDD2,stroke:#000000
+    style MRStatus stroke:#000000,fill:#FFCDD2
+    style Note1 stroke:#000000,fill:#FF6D00,color:#FFFFFF
+    style Note2 stroke:#000000,fill:#FF6D00,color:#FFFFFF
+    style HW fill:transparent,stroke:#000000,stroke-width:1px
+    style PROC fill:transparent,stroke:#000000,stroke-width:1px
+    style ROS fill:transparent,stroke:#000000,stroke-width:1px
+    style MR fill:transparent,stroke:#000000,stroke-width:1px
