@@ -14,7 +14,7 @@
 
 """Python controller for Mavic 2 Pro with ROS2 integration via rosbridge.
    Connects to ROS2 container running at localhost:9090
-   Also provides MJPEG video stream on http://localhost:8080/video"""
+   Publishes MJPEG video stream to Nimbus Hub via HTTP POST"""
 
 from controller import Robot, Keyboard
 import json
@@ -24,7 +24,6 @@ import base64
 import io
 import queue
 import requests
-from http.server import BaseHTTPRequestHandler, HTTPServer
 try:
     import websocket
 except ImportError:
@@ -74,7 +73,6 @@ CONFIG = {
     'TAKEOFF_ALTITUDE': 2.0,  # Home + 2m on z-axis
 
     # Video Stream
-    'VIDEO_PORT': 8080,
     'VIDEO_JPEG_QUALITY': 85,
 
     # ROS2 Connection
@@ -220,71 +218,26 @@ class DroneState:
         }
 
 
-class MJPEGStreamHandler(BaseHTTPRequestHandler):
-    """HTTP handler for MJPEG video streaming"""
+class VideoPublisher:
+    """Encodes video frames and publishes to hub via HTTP POST"""
 
-    def do_GET(self):
-        if self.path == '/video':
-            self.send_response(200)
-            self.send_header('Content-type', 'multipart/x-mixed-replace; boundary=--jpgboundary')
-            self.end_headers()
-
-            print("Client connected to video stream")
-
-            while True:
-                try:
-                    # Get latest frame from global
-                    if hasattr(self.server, 'latest_frame') and self.server.latest_frame:
-                        jpg = self.server.latest_frame
-
-                        # Write MJPEG frame with headers as raw bytes
-                        self.wfile.write(b"--jpgboundary\r\n")
-                        self.wfile.write(b"Content-type: image/jpeg\r\n")
-                        self.wfile.write(f"Content-length: {len(jpg)}\r\n\r\n".encode())
-                        self.wfile.write(jpg)
-                        self.wfile.write(b"\r\n")
-
-                    time.sleep(0.033)  # 30 FPS
-                except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
-                    print("Client disconnected from video stream")
-                    break
-                except Exception as e:
-                    print(f"Error streaming frame: {e}")
-                    break
-        else:
-            self.send_response(404)
-            self.end_headers()
-
-    def log_message(self, format, *args):
-        pass  # Suppress logs
-
-
-class VideoStreamServer:
-    """MJPEG video streaming server with async encoding"""
-
-    def __init__(self, port=8080):
-        self.port = port
-        self.server = None
-        self.server_thread = None
+    def __init__(self, hub_url):
+        self.hub_url = hub_url
         self.encoder_thread = None
         self.running = False
-        self.frame_queue = queue.Queue(maxsize=2)  # Limit queue size to avoid lag
+        self.frame_queue = queue.Queue(maxsize=2)
+        self.last_publish_time = 0
+        self.publish_interval = 0.033  # 30 FPS max
 
     def start(self):
-        """Start the HTTP server and encoding thread"""
-        self.server = HTTPServer(('0.0.0.0', self.port), MJPEGStreamHandler)
-        self.server.latest_frame = None
+        """Start the encoding and publishing thread"""
         self.running = True
 
         # Start encoding thread
         self.encoder_thread = threading.Thread(target=self._encoding_loop, daemon=True)
         self.encoder_thread.start()
 
-        # Start HTTP server thread
-        self.server_thread = threading.Thread(target=self.server.serve_forever, daemon=True)
-        self.server_thread.start()
-
-        print(f"MJPEG video stream started on http://localhost:{self.port}/video")
+        print(f"Video publisher started - sending to {self.hub_url}/drone/video")
 
     def queue_frame(self, image_data, width, height):
         """Queue a frame for encoding (non-blocking, called from main loop)"""
@@ -298,13 +251,18 @@ class VideoStreamServer:
             pass  # Drop frame if encoder is behind
 
     def _encoding_loop(self):
-        """Background thread that encodes frames"""
+        """Background thread that encodes and publishes frames"""
         while self.running:
             try:
                 # Get frame from queue with timeout
                 image_data, width, height = self.frame_queue.get(timeout=0.1)
 
                 if Image is None:
+                    continue
+
+                # Rate limit publishing
+                current_time = time.time()
+                if current_time - self.last_publish_time < self.publish_interval:
                     continue
 
                 # Convert BGRA to RGB
@@ -314,24 +272,37 @@ class VideoStreamServer:
                 # Encode as JPEG
                 buffer = io.BytesIO()
                 img.save(buffer, format='JPEG', quality=85)
-                self.server.latest_frame = buffer.getvalue()
+                jpeg_bytes = buffer.getvalue()
+
+                # Publish to hub
+                try:
+                    requests.post(
+                        f"{self.hub_url}/drone/video",
+                        json={
+                            'data': base64.b64encode(jpeg_bytes).decode('ascii'),
+                            'timestamp': current_time,
+                            'width': width,
+                            'height': height
+                        },
+                        timeout=0.01  # 10ms timeout
+                    )
+                    self.last_publish_time = current_time
+                except requests.exceptions.RequestException:
+                    pass  # Silently fail if hub not available
 
             except queue.Empty:
                 continue
             except Exception as e:
-                print(f"Error encoding frame: {e}")
+                print(f"Error encoding/publishing frame: {e}")
 
     def stop(self):
-        """Stop the HTTP server and encoding thread"""
+        """Stop the encoding thread"""
         self.running = False
 
         if self.encoder_thread and self.encoder_thread.is_alive():
             self.encoder_thread.join(timeout=1)
 
-        if self.server:
-            self.server.shutdown()
-
-        print("Video stream stopped")
+        print("Video publisher stopped")
 
 
 class ROS2Bridge:
@@ -531,8 +502,8 @@ class Mavic2ProROS2Controller(Robot):
         self.ros2 = ROS2Bridge(host=CONFIG['ROS2_HOST'], port=CONFIG['ROS2_PORT'])
         self.ros2_connected = False
 
-        # Initialize video stream server
-        self.video_server = VideoStreamServer(port=CONFIG['VIDEO_PORT'])
+        # Initialize video publisher
+        self.video_publisher = VideoPublisher(hub_url=CONFIG['HUB_URL'])
 
     def go_home(self):
         """Command drone to return to home position and land"""
@@ -725,8 +696,8 @@ class Mavic2ProROS2Controller(Robot):
             print(f"  - {obj_name}: ({pos['x']:.2f}, {pos['y']:.2f}, {pos['z']:.2f})")
         print("=" * 60)
 
-        # Start video stream server
-        self.video_server.start()
+        # Start video publisher
+        self.video_publisher.start()
 
         # Try to connect to ROS2
         print("Attempting to connect to ROS2 container...")
@@ -945,10 +916,10 @@ class Mavic2ProROS2Controller(Robot):
             self.rear_left_motor.setVelocity(-rear_left_motor_input)
             self.rear_right_motor.setVelocity(rear_right_motor_input)
 
-            # Queue camera frame for async encoding (non-blocking)
+            # Queue camera frame for async encoding and publishing (non-blocking)
             image = self.camera.getImage()
             if image is not None:
-                self.video_server.queue_frame(
+                self.video_publisher.queue_frame(
                     bytes(image),
                     self.camera.getWidth(),
                     self.camera.getHeight()
@@ -967,7 +938,7 @@ class Mavic2ProROS2Controller(Robot):
                 last_publish_time = time_now
 
         # Cleanup
-        self.video_server.stop()
+        self.video_publisher.stop()
         if self.ros2_connected:
             self.ros2.disconnect()
 

@@ -16,34 +16,27 @@ class VideoStreamService:
         self.thread = None
         self.running = False
 
-        # Video capture
-        self.cap = None
+        # Connection status
         self.connected = False
 
         # Statistics
         self.frames_received = 0
         self.start_time = None
 
-    def start_service(self, app, stream_url='http://localhost:8080/video'):
+    def start_service(self, app, stream_url=None):
         """Start the video stream service"""
         self.app = app
-        self.stream_url = stream_url
         self.running = True
 
-        # Start video capture thread
         self.thread = threading.Thread(target=self._video_loop, daemon=True)
         self.thread.start()
 
         app.config['VIDEO_STREAM_RUNNING'] = True
-        logger.info(f"Video stream service started - connecting to {stream_url}")
+        logger.info("Video stream service started - reading from shared state")
 
     def stop_service(self):
         """Stop the video stream service"""
         self.running = False
-
-        # Close video capture
-        if self.cap:
-            self.cap.release()
 
         if self.thread and self.thread.is_alive():
             self.thread.join(timeout=2)
@@ -53,75 +46,44 @@ class VideoStreamService:
         logger.info("Video stream service stopped")
 
     def _video_loop(self):
-        """Main video capture loop"""
-        retry_count = 0
-        max_retries = 5
+        """Main video capture loop - reads from shared state"""
+        import numpy as np
 
-        while self.running and retry_count < max_retries:
+        logger.info("Video loop started - reading from shared state")
+        self.connected = True
+        self.start_time = time.time()
+
+        while self.running:
             try:
-                if not self.connected:
-                    self._connect_to_stream()
-                    if not self.connected:
-                        retry_count += 1
-                        if retry_count >= max_retries:
-                            logger.error(f"Failed to connect after {max_retries} attempts. Stopping.")
-                            self.running = False
-                            break
-                        time.sleep(2)  # Wait before retry
-                else:
-                    # Read frames
-                    ret, frame = self.cap.read()
-                    if ret:
-                        self.frames_received += 1
+                shared_state = self.app.shared_state
 
-                        if not self.start_time:
-                            self.start_time = time.time()
+                if shared_state and shared_state.get('raw_video_frame'):
+                    jpeg_bytes = shared_state['raw_video_frame']
 
-                        # Send frame to AI service for processing
-                        from services.ai_service import add_frame_for_processing
-                        add_frame_for_processing(frame)
+                    if jpeg_bytes:
+                        jpeg_array = np.frombuffer(jpeg_bytes, dtype=np.uint8)
+                        frame = cv2.imdecode(jpeg_array, cv2.IMREAD_COLOR)
 
-                        # Send frame to display service
-                        from services.display_service import update_current_frame
-                        update_current_frame(frame)
+                        if frame is not None:
+                            self.frames_received += 1
 
-                        # Log stats periodically
-                        if self.frames_received % 30 == 0:
-                            elapsed = time.time() - self.start_time
-                            fps = self.frames_received / elapsed if elapsed > 0 else 0
-                            logger.info(f"Received {self.frames_received} frames @ {fps:.1f} FPS")
-                    else:
-                        logger.warning("Failed to read frame from stream")
-                        self.connected = False
-                        time.sleep(1)
+                            from services.ai_service import add_frame_for_processing
+                            add_frame_for_processing(frame)
+
+                            from services.display_service import update_current_frame
+                            update_current_frame(frame)
+
+                            if self.frames_received % 30 == 0:
+                                elapsed = time.time() - self.start_time
+                                fps = self.frames_received / elapsed if elapsed > 0 else 0
+                                logger.info(f"Received {self.frames_received} frames @ {fps:.1f} FPS")
+
+                time.sleep(0.01)
 
             except Exception as e:
                 logger.error(f"Video stream loop error: {e}")
-                self.connected = False
-                retry_count += 1
-                if retry_count >= max_retries:
-                    logger.error(f"Failed to connect after {max_retries} attempts. Stopping.")
-                    self.running = False
-                    break
-                time.sleep(2)
+                time.sleep(1)
 
-    def _connect_to_stream(self):
-        """Connect to MJPEG video stream"""
-        try:
-            logger.info(f"Connecting to video stream at {self.stream_url}")
-
-            self.cap = cv2.VideoCapture(self.stream_url)
-
-            if self.cap.isOpened():
-                self.connected = True
-                logger.info("Video stream connection established")
-            else:
-                logger.error("Failed to open video stream")
-                self.connected = False
-
-        except Exception as e:
-            logger.error(f"Error connecting to video stream: {e}")
-            self.connected = False
 
     def get_connection_status(self):
         """Get connection status info"""
@@ -134,7 +96,7 @@ class VideoStreamService:
 # Global service instance
 video_stream_service_instance = VideoStreamService()
 
-def start_service(app, stream_url='http://localhost:8080/video'):
+def start_service(app, stream_url=None):
     """Start the video stream service"""
     video_stream_service_instance.start_service(app, stream_url)
 

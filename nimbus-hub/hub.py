@@ -211,6 +211,32 @@ def update_drone_state():
         logger.error(f"Update drone state error: {e}")
         return {'status': 'error', 'message': str(e)}, 500
 
+@app.route('/drone/video', methods=['POST'])
+def update_drone_video():
+    """Receive raw video frames from drone/simulation"""
+    try:
+        import base64
+        video_data = request.get_json()
+
+        jpeg_bytes = base64.b64decode(video_data['data'])
+
+        with _topics_lock:
+            _topics['drone/video']['data'] = {
+                'jpeg': jpeg_bytes,
+                'timestamp': video_data.get('timestamp', time.time()),
+                'width': video_data.get('width'),
+                'height': video_data.get('height')
+            }
+            _topics['drone/video']['timestamp'] = time.time()
+
+        if shared_state:
+            shared_state['raw_video_frame'] = jpeg_bytes
+
+        return {'status': 'ok'}, 200
+    except Exception as e:
+        logger.error(f"Update drone video error: {e}")
+        return {'status': 'error', 'message': str(e)}, 500
+
 @app.route('/drone/state', methods=['GET'])
 def get_drone_state():
     """Shortcut for getting drone state"""
@@ -530,6 +556,31 @@ def video_feed():
                 yield (b'--frame\r\n'
                        b'Content-Type: image/jpeg\r\n\r\n' + placeholder_bytes + b'\r\n')
             time.sleep(0.033)  # ~30 FPS
+
+    return Response(generate(), mimetype='multipart/x-mixed-replace; boundary=frame')
+
+@app.route('/raw_video_feed')
+def raw_video_feed():
+    """MJPEG video stream of raw video from drone/simulation"""
+    def generate():
+        import numpy as np
+        import cv2
+
+        placeholder = np.zeros((480, 640, 3), dtype=np.uint8)
+        cv2.putText(placeholder, 'Waiting for raw video...', (150, 240),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+        ret, placeholder_jpeg = cv2.imencode('.jpg', placeholder)
+        placeholder_bytes = placeholder_jpeg.tobytes()
+
+        while True:
+            if shared_state and shared_state.get('raw_video_frame'):
+                frame = shared_state['raw_video_frame']
+                yield (b'--frame\r\n'
+                       b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
+            else:
+                yield (b'--frame\r\n'
+                       b'Content-Type: image/jpeg\r\n\r\n' + placeholder_bytes + b'\r\n')
+            time.sleep(0.033)
 
     return Response(generate(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
