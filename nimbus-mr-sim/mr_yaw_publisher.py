@@ -1,40 +1,79 @@
 import socket
 import json
 import websocket
+import time
 
 # Unity TCP settings
 HOST = '127.0.0.1'
 PORT = 9998
 
-def main():
-    # Start TCP server for Unity
+def start_tcp_server():
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.bind((HOST, PORT))
     server.listen(1)
+    server.settimeout(1.0)  # allows checking for shutdown / Ctrl+C
     print(f"Waiting for Unity on port {PORT}...")
+    return server
+
+def wait_for_unity(server, running):
+    conn = None
+    addr = None
+    while running and conn is None:
+        try:
+            conn, addr = server.accept()
+            print(f"Connected by {addr}")
+        except socket.timeout:
+            continue  # retry until Unity connects
+    return conn, addr
+
+def main():
+    # Start TCP server for Unity
+    running = True
+    server = start_tcp_server()
 
     # Waits for connection before proceeding
-    conn, addr = server.accept()
-    print(f"Connected by {addr}")
-
+    conn, addr = None, None
+    
     buffer = ""
-    while True:
-        data = conn.recv(1024).decode('utf-8')
-        if not data:
-            print("Lost connection to Unity")
-            break
-
-        # Each yaw value contained before line break character
-        buffer += data
-        while '\n' in buffer:
-            line, buffer = buffer.split('\n', 1)
+    try:
+        while running:
+            if conn is None:
+                conn, addr = wait_for_unity(server, running)
+                buffer = ""  # clear buffer on new connection
+            
             try:
-                # Temporarily output yaw in terminal
-                yaw = float(line)
-                print(f"Received yaw: {yaw}")
+                data = conn.recv(1024).decode('utf-8')
+                if not data:
+                    print("[WARNING] Lost connection to Unity.")
+                    conn.close()
+                    conn = None
+                    continue
 
-            except ValueError:
-                print("Invalid yaw data:", line)
+                # Each yaw value contained before line break character
+                buffer += data
+                while '\n' in buffer:
+                    line, buffer = buffer.split('\n', 1)
+                    try:
+                        # Temporarily output yaw in terminal
+                        yaw = float(line)
+                        print(f"Received yaw: {yaw}")
+
+                    except ValueError:
+                        print("Invalid yaw data:", line)
+            except (ConnectionResetError, OSError, BrokenPipeError):
+                print("[WARNING] Lost connection to Unity.")
+                try:
+                    conn.close()
+                except:
+                    pass
+                conn = None
+                return False
+    except KeyboardInterrupt:
+        print("\nShutting down server...")
+        running = False
+        if conn:
+            conn.close()
+        server.close()
 
 if __name__ == "__main__":
     main()

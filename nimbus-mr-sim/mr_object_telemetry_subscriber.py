@@ -4,6 +4,7 @@ import time
 import requests
 
 DRONE_TELEMETRY_URL = "http://127.0.0.1:5000/api/target_status"
+TCP_PORT = 8888
 
 class TelemetryForwarder:
     def __init__(self):
@@ -20,9 +21,9 @@ class TelemetryForwarder:
         if not self.server:
             self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            self.server.bind(('127.0.0.1', 8888))
+            self.server.bind(('127.0.0.1', TCP_PORT))
             self.server.listen(1)
-            print(f"Waiting for Unity to connect on port 8888...")
+            print(f"Waiting for Unity to connect on port {TCP_PORT}...")
 
         self.conn, self.addr = self.server.accept()
         print(f"Connected to Unity: {self.addr}")
@@ -102,14 +103,23 @@ class TelemetryForwarder:
 
     def start(self):
         self.start_tcp_server()
-        while True:
-            if not self.conn:
-                print("Reconnecting to Unity...")
-                self.start_tcp_server()
-            self.forward_new_objects()
-            time.sleep(0.2)
+        try:
+            while True:
+                if not self.conn:
+                    print("Reconnecting to Unity...")
+                    self.start_tcp_server()
+                self.forward_new_objects()
+                time.sleep(0.2)
+        except KeyboardInterrupt:
+            print("Shutting down server...")
+            self.running = False
+            if self.conn:
+                self.conn.close()
 
 
-if __name__ == "__main__":
+def main():
     forwarder = TelemetryForwarder()
     forwarder.start()
+
+if __name__ == "__main__":
+    main()

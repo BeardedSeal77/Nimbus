@@ -2,6 +2,7 @@ import socket
 import json
 import time
 import requests
+import threading
 
 DRONE_TELEMETRY_URL = "http://127.0.0.1:5000/api/debug/drone_telemetry"
 
@@ -10,6 +11,7 @@ class TelemetryForwarder:
         self.conn = None
         self.addr = None
         self.server = None
+        self.lock = threading.Lock()
         self.sent_objects = set()  # store already-sent objects by (label, position)
 
     def start_tcp_server(self):
@@ -35,9 +37,31 @@ class TelemetryForwarder:
         except Exception as e:
             print("Failed to fetch telemetry:", e)
         return None
+    
+    def send_to_unity(self, msg):
+        with self.lock:
+            if not self.conn:
+                return False
+
+            try:
+                self.conn.sendall(msg.encode("utf-8"))
+                return True
+            except (BrokenPipeError, ConnectionResetError, OSError):
+                print("[WARNING] Lost connection to Unity.")
+                if self.conn:
+                    try:
+                        self.conn.close()
+                    except:
+                        pass
+                    self.conn = None
+                    return False
 
     # Send object data to Unity via TCP
     def forward_new_objects(self):  
+        while self.running:
+            if not self.conn:
+                self.start_tcp_server()
+
         telemetry = self.fetch_telemetry()
         if not telemetry or "world_objects" not in telemetry:
             return
