@@ -14,7 +14,7 @@
 
 """Python controller for Mavic 2 Pro with ROS2 integration via rosbridge.
    Connects to ROS2 container running at localhost:9090
-   Publishes MJPEG video stream to Nimbus Hub via HTTP POST"""
+   Also provides MJPEG video stream on http://localhost:8080/video"""
 
 from controller import Robot, Keyboard
 import json
@@ -24,7 +24,8 @@ import base64
 import io
 import queue
 import requests
-from PID import AltitudeController, NavigationController, clamp
+import math
+from http.server import BaseHTTPRequestHandler, HTTPServer
 try:
     import websocket
 except ImportError:
@@ -37,7 +38,8 @@ except ImportError:
     Image = None
 
 
-# clamp() function moved to PID.py
+def clamp(value, value_min, value_max):
+    return min(max(value, value_min), value_max)
 
 
 # ============================================================================
@@ -73,6 +75,7 @@ CONFIG = {
     'TAKEOFF_ALTITUDE': 2.0,  # Home + 2m on z-axis
 
     # Video Stream
+    'VIDEO_PORT': 8080,
     'VIDEO_JPEG_QUALITY': 85,
 
     # ROS2 Connection
@@ -83,16 +86,6 @@ CONFIG = {
     # Nimbus Hub (Central Communication)
     'HUB_URL': 'http://localhost:5000',
     'HUB_PUBLISH_INTERVAL': 0.01,  # 100Hz (10ms)
-
-    # Simulation and Autonomous Control
-    'SIMULATION_MODE': True,
-    'NAV_HEADING_KP': 0.8,
-    'NAV_HEADING_KD': 0.6,
-    'NAV_DISTANCE_KP': 2.0,
-    'NAV_DISTANCE_KD': 0.5,
-    'NAV_HEADING_THRESHOLD_DEG': 3.0,
-    'NAV_DISTANCE_THRESHOLD_M': 1.0,
-    'NAV_POLL_INTERVAL': 0.1,
 
     # Camera
     'CAMERA_ROLL_FACTOR': -0.115,
@@ -228,26 +221,71 @@ class DroneState:
         }
 
 
-class VideoPublisher:
-    """Encodes video frames and publishes to hub via HTTP POST"""
+class MJPEGStreamHandler(BaseHTTPRequestHandler):
+    """HTTP handler for MJPEG video streaming"""
 
-    def __init__(self, hub_url):
-        self.hub_url = hub_url
+    def do_GET(self):
+        if self.path == '/video':
+            self.send_response(200)
+            self.send_header('Content-type', 'multipart/x-mixed-replace; boundary=--jpgboundary')
+            self.end_headers()
+
+            print("Client connected to video stream")
+
+            while True:
+                try:
+                    # Get latest frame from global
+                    if hasattr(self.server, 'latest_frame') and self.server.latest_frame:
+                        jpg = self.server.latest_frame
+
+                        # Write MJPEG frame with headers as raw bytes
+                        self.wfile.write(b"--jpgboundary\r\n")
+                        self.wfile.write(b"Content-type: image/jpeg\r\n")
+                        self.wfile.write(f"Content-length: {len(jpg)}\r\n\r\n".encode())
+                        self.wfile.write(jpg)
+                        self.wfile.write(b"\r\n")
+
+                    time.sleep(0.033)  # 30 FPS
+                except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                    print("Client disconnected from video stream")
+                    break
+                except Exception as e:
+                    print(f"Error streaming frame: {e}")
+                    break
+        else:
+            self.send_response(404)
+            self.end_headers()
+
+    def log_message(self, format, *args):
+        pass  # Suppress logs
+
+
+class VideoStreamServer:
+    """MJPEG video streaming server with async encoding"""
+
+    def __init__(self, port=8080):
+        self.port = port
+        self.server = None
+        self.server_thread = None
         self.encoder_thread = None
         self.running = False
-        self.frame_queue = queue.Queue(maxsize=2)
-        self.last_publish_time = 0
-        self.publish_interval = 0.033  # 30 FPS max
+        self.frame_queue = queue.Queue(maxsize=2)  # Limit queue size to avoid lag
 
     def start(self):
-        """Start the encoding and publishing thread"""
+        """Start the HTTP server and encoding thread"""
+        self.server = HTTPServer(('0.0.0.0', self.port), MJPEGStreamHandler)
+        self.server.latest_frame = None
         self.running = True
 
         # Start encoding thread
         self.encoder_thread = threading.Thread(target=self._encoding_loop, daemon=True)
         self.encoder_thread.start()
 
-        print(f"Video publisher started - sending to {self.hub_url}/drone/video")
+        # Start HTTP server thread
+        self.server_thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.server_thread.start()
+
+        print(f"MJPEG video stream started on http://localhost:{self.port}/video")
 
     def queue_frame(self, image_data, width, height):
         """Queue a frame for encoding (non-blocking, called from main loop)"""
@@ -261,18 +299,13 @@ class VideoPublisher:
             pass  # Drop frame if encoder is behind
 
     def _encoding_loop(self):
-        """Background thread that encodes and publishes frames"""
+        """Background thread that encodes frames"""
         while self.running:
             try:
                 # Get frame from queue with timeout
                 image_data, width, height = self.frame_queue.get(timeout=0.1)
 
                 if Image is None:
-                    continue
-
-                # Rate limit publishing
-                current_time = time.time()
-                if current_time - self.last_publish_time < self.publish_interval:
                     continue
 
                 # Convert BGRA to RGB
@@ -282,37 +315,24 @@ class VideoPublisher:
                 # Encode as JPEG
                 buffer = io.BytesIO()
                 img.save(buffer, format='JPEG', quality=85)
-                jpeg_bytes = buffer.getvalue()
-
-                # Publish to hub
-                try:
-                    requests.post(
-                        f"{self.hub_url}/drone/video",
-                        json={
-                            'data': base64.b64encode(jpeg_bytes).decode('ascii'),
-                            'timestamp': current_time,
-                            'width': width,
-                            'height': height
-                        },
-                        timeout=0.01  # 10ms timeout
-                    )
-                    self.last_publish_time = current_time
-                except requests.exceptions.RequestException:
-                    pass  # Silently fail if hub not available
+                self.server.latest_frame = buffer.getvalue()
 
             except queue.Empty:
                 continue
             except Exception as e:
-                print(f"Error encoding/publishing frame: {e}")
+                print(f"Error encoding frame: {e}")
 
     def stop(self):
-        """Stop the encoding thread"""
+        """Stop the HTTP server and encoding thread"""
         self.running = False
 
         if self.encoder_thread and self.encoder_thread.is_alive():
             self.encoder_thread.join(timeout=1)
 
-        print("Video publisher stopped")
+        if self.server:
+            self.server.shutdown()
+
+        print("Video stream stopped")
 
 
 class ROS2Bridge:
@@ -497,29 +517,6 @@ class Mavic2ProROS2Controller(Robot):
         # PID derivative tracking
         self.prev_altitude = 0.0
 
-        # PID Controllers
-        self.altitude_controller = AltitudeController(
-            k_p=CONFIG['K_VERTICAL_P'],
-            k_d=CONFIG['K_VERTICAL_D'],
-            offset=CONFIG['K_VERTICAL_OFFSET']
-        )
-
-        self.navigation_controller = NavigationController(
-            heading_kp=CONFIG['NAV_HEADING_KP'],
-            heading_kd=CONFIG['NAV_HEADING_KD'],
-            distance_kp=CONFIG['NAV_DISTANCE_KP'],
-            distance_kd=CONFIG['NAV_DISTANCE_KD'],
-            heading_threshold_deg=CONFIG['NAV_HEADING_THRESHOLD_DEG'],
-            distance_threshold_m=CONFIG['NAV_DISTANCE_THRESHOLD_M'],
-            max_yaw=CONFIG['YAW_DISTURBANCE_RIGHT'],
-            max_pitch=abs(CONFIG['PITCH_DISTURBANCE_FORWARD'])
-        )
-
-        # Navigation state
-        self.autonomous_mode = False
-        self.navigation_target = None  # Legacy delta-based (deprecated)
-        self.object_absolute_position = None  # World position of target object
-
         self.front_left_motor = self.getDevice("front left propeller")
         self.front_right_motor = self.getDevice("front right propeller")
         self.rear_left_motor = self.getDevice("rear left propeller")
@@ -535,8 +532,8 @@ class Mavic2ProROS2Controller(Robot):
         self.ros2 = ROS2Bridge(host=CONFIG['ROS2_HOST'], port=CONFIG['ROS2_PORT'])
         self.ros2_connected = False
 
-        # Initialize video publisher
-        self.video_publisher = VideoPublisher(hub_url=CONFIG['HUB_URL'])
+        # Initialize video stream server
+        self.video_server = VideoStreamServer(port=CONFIG['VIDEO_PORT'])
 
     def go_home(self):
         """Command drone to return to home position and land"""
@@ -664,7 +661,6 @@ class Mavic2ProROS2Controller(Robot):
         self.ros2.publish("/drone/altitude", altitude_msg)
 
         # Compute facing vector from yaw (forward direction in XY plane)
-        import math
         facing_x = math.cos(yaw)
         facing_y = math.sin(yaw)
         facing_z = 0.0  # Assuming level flight for forward direction
@@ -683,7 +679,6 @@ class Mavic2ProROS2Controller(Robot):
         """Publish complete drone state to Nimbus Hub (fast HTTP)"""
         try:
             # Compute facing vector from yaw
-            import math
             yaw = self.state.orientation['yaw']
             facing_x = math.cos(yaw)
             facing_y = math.sin(yaw)
@@ -702,15 +697,7 @@ class Mavic2ProROS2Controller(Robot):
                 'distance_to_home': self.state.distance_to_home(),
                 'connected': True,
                 'timestamp': self.getTime(),
-                'world_objects': WORLD_OBJECTS,  # Ground truth object positions for TRIG depth method
-                'simulation': CONFIG['SIMULATION_MODE'],
-                'autonomous_mode': self.autonomous_mode,
-                'navigation_target': self.navigation_target,
-                'camera_config': {
-                    'fov': 0.7854,
-                    'width': self.camera.getWidth(),
-                    'height': self.camera.getHeight()
-                }
+                'world_objects': WORLD_OBJECTS  # Ground truth object positions for TRIG depth method
             }
 
             # Non-blocking POST to hub
@@ -723,57 +710,6 @@ class Mavic2ProROS2Controller(Robot):
         except Exception as e:
             # Silently fail - don't block control loop
             pass
-
-    def poll_navigation_target(self):
-        """Poll hub for object absolute position from AI"""
-        try:
-            response = requests.get(
-                f"{CONFIG['HUB_URL']}/navigation/object_position",
-                timeout=0.01
-            )
-            if response.status_code == 200:
-                data = response.json()
-                if data.get('has_position') and data.get('object_position'):
-                    self.object_absolute_position = data['object_position']
-        except:
-            pass
-
-    def get_navigation_disturbances(self):
-        """Calculate yaw/pitch from object absolute position (if autonomous mode active)"""
-        if not self.autonomous_mode or not self.object_absolute_position:
-            return 0.0, 0.0
-
-        import math
-
-        obj_x = self.object_absolute_position['x']
-        obj_y = self.object_absolute_position['y']
-
-        drone_x = self.state.position['x']
-        drone_y = self.state.position['y']
-
-        world_dx = obj_x - drone_x
-        world_dy = obj_y - drone_y
-
-        drone_yaw = self.state.orientation['yaw']
-
-        delta_x = world_dx * math.cos(drone_yaw) + world_dy * math.sin(drone_yaw)
-        delta_y = -world_dx * math.sin(drone_yaw) + world_dy * math.cos(drone_yaw)
-
-        result = self.navigation_controller.update(
-            delta_x=delta_x,
-            delta_y=delta_y,
-            dt=self.time_step / 1000.0
-        )
-
-        if result['at_target']:
-            print(f"[AUTO] Arrived at target!")
-            self.autonomous_mode = False
-        elif not result['heading_locked']:
-            print(f"[AUTO] Turning to target (error: {result['heading_error_deg']:.1f} deg)")
-        else:
-            print(f"[AUTO] Moving forward ({result['distance']:.2f}m remaining)")
-
-        return result['yaw_disturbance'], result['pitch_disturbance']
 
     def run(self):
         print("=" * 60)
@@ -788,8 +724,15 @@ class Mavic2ProROS2Controller(Robot):
             print(f"  - {obj_name}: ({pos['x']:.2f}, {pos['y']:.2f}, {pos['z']:.2f})")
         print("=" * 60)
 
-        # Start video publisher
-        self.video_publisher.start()
+        target_pos = None
+        flying_to_target = False
+
+        # Yaw mode
+        self.headset_yaw_enabled = False
+        self.headset_offset = 0
+
+        # Start video stream server
+        self.video_server.start()
 
         # Try to connect to ROS2
         print("Attempting to connect to ROS2 container...")
@@ -819,14 +762,12 @@ class Mavic2ProROS2Controller(Robot):
         print("- Numpad 6: camera pan right")
         print("- H: return home and land")
         print("- L: land at current position")
-        print("- A: toggle autonomous object tracking")
+        print("- Z: activate or deactivate headset yaw control")
 
         last_publish_time = 0
         last_hub_publish_time = 0
-        last_nav_poll_time = 0
         publish_interval = CONFIG['ROS2_PUBLISH_INTERVAL']
         hub_publish_interval = CONFIG['HUB_PUBLISH_INTERVAL']
-        nav_poll_interval = CONFIG['NAV_POLL_INTERVAL']
 
         while self.step(self.time_step) != -1:
             time_now = self.getTime()
@@ -835,6 +776,8 @@ class Mavic2ProROS2Controller(Robot):
             roll, pitch, yaw = self.imu.getRollPitchYaw()
             x_pos, y_pos, altitude = self.gps.getValues()
             roll_velocity, pitch_velocity, yaw_velocity = self.gyro.getValues()
+
+            # print("drone yaw: "+str(yaw))
 
             # Update drone state
             self.state.update(x_pos, y_pos, altitude, roll, pitch, yaw,
@@ -875,9 +818,6 @@ class Mavic2ProROS2Controller(Robot):
                 # Pure manual control
                 self.camera_roll_motor.setPosition(self.camera_manual_roll)
                 self.camera_pitch_motor.setPosition(self.camera_manual_pitch)
-
-            # Get navigation disturbances if autonomous
-            nav_yaw, nav_pitch = self.get_navigation_disturbances()
 
             # Handle keyboard input - set target disturbances
             self.target_roll_disturbance = 0.0
@@ -926,6 +866,26 @@ class Mavic2ProROS2Controller(Robot):
                     self.camera_manual_roll -= CONFIG['CAMERA_MANUAL_INCREMENT']
                     print(f"Camera roll: {self.camera_manual_roll:.3f} rad")
 
+                # Headset Yaw enable or disable
+                elif key == ord('Z'):
+                    time.sleep(0.1)
+                    self.headset_yaw_enabled = not self.headset_yaw_enabled
+                    status = "ENABLED" if self.headset_yaw_enabled else "DISABLED"
+                    print(f"Headset yaw control {status}")
+
+                    headset_data = self.get_headset_yaw()
+                    if headset_data and headset_data.get("status") == "ok":
+                        headset_yaw = headset_data.get("yaw", 0.0)
+                        headset_yaw_rad = math.radians(headset_yaw)
+                        drone_yaw_rad = yaw
+
+                        drone_yaw_rad = (drone_yaw_rad + math.pi) % (2*math.pi) - math.pi
+                        headset_yaw_rad = (headset_yaw_rad + math.pi) % (2*math.pi) - math.pi
+
+                        self.headset_offset = drone_yaw_rad - headset_yaw_rad
+                        print(f"Headset yaw control ENABLED — offset = {self.headset_offset:.3f} rad")
+
+
                 # Debug: print unknown keys
                 elif key not in [Keyboard.UP, Keyboard.DOWN, Keyboard.LEFT, Keyboard.RIGHT]:
                     if key > 0 and key < 500:  # Reasonable key range
@@ -936,16 +896,124 @@ class Mavic2ProROS2Controller(Robot):
                     self.go_home()
                 elif key == ord('L'):
                     self.land()
-                elif key == ord('A'):
-                    self.autonomous_mode = not self.autonomous_mode
-                    print(f"[AUTONOMOUS MODE: {'ENABLED' if self.autonomous_mode else 'DISABLED'}]")
 
                 key = self.keyboard.getKey()
+            
+            # Get AI state from hub
+            ai_state = self.get_ai_state()
 
-            # Override with autonomous navigation if active
-            if self.autonomous_mode and self.object_absolute_position:
-                self.target_yaw_disturbance = nav_yaw
-                self.target_pitch_disturbance = nav_pitch
+            if self.headset_yaw_enabled:
+                # get headset yaw from the method, decode json to float, convert from degree to radians
+                headset_data = self.get_headset_yaw()
+                if headset_data and headset_data.get("status") == "ok":
+                    headset_yaw_deg = headset_data.get("yaw", 0.0)
+                    headset_yaw_rad = math.radians(headset_yaw_deg)
+                    # apply offset
+                    desired_yaw = -headset_yaw_rad + self.headset_offset
+                    # normalize to -pi to pi
+                    desired_yaw = (desired_yaw + math.pi) % (2*math.pi) - math.pi
+
+                    yaw_error = desired_yaw - yaw
+                    yaw_error = (yaw_error + math.pi) % (2*math.pi) - math.pi
+
+                     # Initialize previous error if first run
+                    if not hasattr(self, "prev_yaw_error"):
+                        self.prev_yaw_error = 0.0
+
+                    # Control loop interval (adjust if different)
+                    dt = 0.02  # seconds
+
+                    # PD controller gains
+                    Kp = 2.0  # proportional
+                    Kd = 0.5  # derivative (damping)
+
+                    # Derivative term
+                    derivative = (yaw_error - self.prev_yaw_error) / dt
+
+                    # Compute yaw disturbance
+                    self.target_yaw_disturbance = clamp(Kp * yaw_error + Kd * derivative, -2.0, 2.0)
+                    # yaw_input = clamp(Kp * yaw_error + Kd * derivative, -2.0, 2.0)
+
+                    # Update previous error for next iteration
+                    self.prev_yaw_error = yaw_error
+
+                    # small deadzone to stop jitter
+                    if abs(yaw_error) < 0.1:  # ~0.5 degrees
+                        self.target_yaw_disturbance = 0.0
+                    
+
+
+            if ai_state is not None:
+                # The AI result data is inside ai_state["ai_results"]
+                results = ai_state.get("ai_results", {})
+
+                # Check if depth info (object + drone positions) is available
+                if results.get("processing_status") == "object_detected_with_depth":
+                    if results.get("intent") == "go":
+                        flying_to_target = True
+                        depth_result = results.get("depth_result", {})
+                        target_pos = depth_result.get("object_position")
+                    else:
+                        flying_to_target = False
+            
+            if flying_to_target:
+                if flying_to_target and target_pos is not None:
+                    # --- PID PARAMETERS ---
+                    Kp = 0.4
+                    Ki = 0.0
+                    Kd = 0.15
+                    SCALE = 1.0        # scale PID output to disturbance range
+                    MAX_DISTURB = 4.0  # maximum allowed pitch/roll disturbance
+
+                    # Initialize PID memory if missing
+                    if not hasattr(self, 'pid_prev_error'):
+                        self.pid_prev_error = {'x': 0.0, 'y': 0.0}
+                        self.pid_integral = {'x': 0.0, 'y': 0.0}
+
+                    dt = self.time_step / 1000.0  # convert ms to seconds
+
+                    # --- POSITION ERROR (desired - current) ---
+                    error_x = target_pos['x'] - self.state.position['x']   # forward/back
+                    error_y = target_pos['y'] - self.state.position['y']   # left/right
+
+                    # YAW CORRECTIONs
+
+                    print("yaw: "+str(yaw))
+                    cos_yaw = math.cos(-yaw)
+                    sin_yaw = math.sin(-yaw)
+
+                    local_error_x = cos_yaw*error_x-sin_yaw*error_y
+                    local_error_y = sin_yaw * error_x + cos_yaw * error_y
+
+                    error_x = local_error_x
+                    error_y = local_error_y
+
+                    # --- INTEGRAL TERM ---
+                    self.pid_integral['x'] += error_x * dt
+                    self.pid_integral['y'] += error_y * dt
+
+                    # --- DERIVATIVE TERM ---
+                    deriv_x = (error_x - self.pid_prev_error['x']) / dt
+                    deriv_y = (error_y - self.pid_prev_error['y']) / dt
+
+                    # --- PID OUTPUT ---
+                    control_x = Kp * error_x + Ki * self.pid_integral['x'] + Kd * deriv_x
+                    control_y = Kp * error_y + Ki * self.pid_integral['y'] + Kd * deriv_y
+
+                    # --- CLAMP OUTPUTS (to avoid flipping) ---
+                    control_x = max(-MAX_DISTURB, min(MAX_DISTURB, control_x))
+                    control_y = max(-MAX_DISTURB, min(MAX_DISTURB, control_y))
+
+                    # --- SAVE FOR NEXT LOOP ---
+                    self.pid_prev_error['x'] = error_x
+                    self.pid_prev_error['y'] = error_y
+
+                    # --- APPLY TO DISTURBANCES ---
+                    # Note: x → pitch (forward/back), y → roll (left/right)
+                    self.target_pitch_disturbance = -control_x * SCALE   # Negative: forward in world space usually = negative pitch
+                    self.target_roll_disturbance = control_y * SCALE
+
+                    # print(f"[PID] target_pitch={self.target_pitch_disturbance:.2f}, target_roll={self.target_roll_disturbance:.2f}")
 
             # Smooth ramping of disturbances (interpolate current toward target)
             dt = self.time_step / 1000.0  # Convert ms to seconds
@@ -982,25 +1050,31 @@ class Mavic2ProROS2Controller(Robot):
 
             # PID control with damping
             # Roll/Pitch: stronger P gain + velocity damping + disturbance input
+            # print("roll_disturbance: "+str(roll_disturbance))
+            # print("pitch_disturbance: "+str(pitch_disturbance))
+            # print("target object coordinates: "+str(target_pos))
             roll_input = CONFIG['K_ROLL_P'] * clamp(roll, -1.0, 1.0) + roll_velocity + roll_disturbance
             pitch_input = CONFIG['K_PITCH_P'] * clamp(pitch, -1.0, 1.0) + pitch_velocity + pitch_disturbance
             yaw_input = yaw_disturbance
 
             # Vertical: PD controller (P + D term for damping)
-            vertical_input = self.altitude_controller.update(
-                current_altitude=altitude,
-                target_altitude=self.state.target_altitude,
-                dt=self.time_step / 1000.0
-            )
+            altitude_error = self.state.target_altitude - altitude + CONFIG['K_VERTICAL_OFFSET']
+            altitude_rate = (altitude - self.prev_altitude) / (self.time_step / 1000.0)  # Derivative
+            self.prev_altitude = altitude
+
+            clamped_altitude_error = clamp(altitude_error, -1.0, 1.0)
+            vertical_input = (CONFIG['K_VERTICAL_P'] * pow(clamped_altitude_error, 3.0) -
+                            CONFIG['K_VERTICAL_D'] * altitude_rate)
 
             # Motor control with differential limiting
             base_thrust = CONFIG['K_VERTICAL_THRUST'] + vertical_input
 
             # Calculate raw motor commands
-            front_left_motor_input = base_thrust - roll_input + pitch_input - yaw_input
-            front_right_motor_input = base_thrust + roll_input + pitch_input + yaw_input
-            rear_left_motor_input = base_thrust - roll_input - pitch_input + yaw_input
-            rear_right_motor_input = base_thrust + roll_input - pitch_input - yaw_input
+            yaw_gain = 1.5
+            front_left_motor_input = base_thrust - roll_input + pitch_input - yaw_input*yaw_gain
+            front_right_motor_input = base_thrust + roll_input + pitch_input + yaw_input*yaw_gain
+            rear_left_motor_input = base_thrust - roll_input - pitch_input + yaw_input*yaw_gain
+            rear_right_motor_input = base_thrust + roll_input - pitch_input - yaw_input*yaw_gain
 
             # Limit differential from base thrust to prevent overcorrection
             max_diff = CONFIG['MAX_MOTOR_DIFFERENTIAL']
@@ -1020,10 +1094,10 @@ class Mavic2ProROS2Controller(Robot):
             self.rear_left_motor.setVelocity(-rear_left_motor_input)
             self.rear_right_motor.setVelocity(rear_right_motor_input)
 
-            # Queue camera frame for async encoding and publishing (non-blocking)
+            # Queue camera frame for async encoding (non-blocking)
             image = self.camera.getImage()
             if image is not None:
-                self.video_publisher.queue_frame(
+                self.video_server.queue_frame(
                     bytes(image),
                     self.camera.getWidth(),
                     self.camera.getHeight()
@@ -1034,11 +1108,6 @@ class Mavic2ProROS2Controller(Robot):
                 self.publish_to_hub()
                 last_hub_publish_time = time_now
 
-            # Poll navigation target from hub (10Hz)
-            if (time_now - last_nav_poll_time) >= nav_poll_interval:
-                self.poll_navigation_target()
-                last_nav_poll_time = time_now
-
             # Publish to ROS2 at lower frequency (30Hz) - for legacy systems
             if self.ros2_connected and (time_now - last_publish_time) >= publish_interval:
                 self.publish_drone_state(x_pos, y_pos, altitude, roll, pitch, yaw,
@@ -1047,9 +1116,29 @@ class Mavic2ProROS2Controller(Robot):
                 last_publish_time = time_now
 
         # Cleanup
-        self.video_publisher.stop()
+        self.video_server.stop()
         if self.ros2_connected:
             self.ros2.disconnect()
+
+    def get_ai_state(self):
+        """Fetch AI results from hub"""
+        try:
+            response = requests.get(f"{CONFIG['HUB_URL']}/api/debug/ai_state", timeout=0.01)
+            if response.status_code == 200:
+                return response.json()
+        except Exception:
+            pass
+        return None
+    
+    def get_headset_yaw(self):
+        """Fetch headset yaw from hub"""
+        try:
+            response = requests.get(f"{CONFIG['HUB_URL']}/api/headset/yaw", timeout=0.01)
+            if response.status_code == 200:
+                return response.json()
+        except Exception:
+            pass
+        return None
 
 
 controller = Mavic2ProROS2Controller()

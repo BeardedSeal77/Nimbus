@@ -72,6 +72,10 @@ def init_shared_state():
     shared_state['audio_recording'] = False
     shared_state['audio_process_trigger'] = False
 
+    # Headset config
+    shared_state['headset_yaw'] = 0.0
+    shared_state['last_headset_update'] = 0.0
+
     logger.info("Shared state initialized")
 
 # ============================================================================
@@ -724,6 +728,57 @@ def health():
         }
 
     return jsonify(status), 200
+
+# ============================================================================
+# HEADSET ORIENTATION ENDPOINTS
+# ============================================================================
+
+@app.route('/api/headset/yaw', methods=['POST'])
+def update_headset_yaw():
+    """Receive headset yaw angle (from Unity)"""
+    try:
+        data = request.get_json()
+        yaw = float(data.get('yaw', 0.0))
+        
+        # Update shared state
+        if shared_state is not None:
+            shared_state['headset_yaw'] = yaw
+            shared_state['last_headset_update'] = time.time()
+
+        # Also publish to broker for real-time consumers
+        with _topics_lock:
+            _topics['headset/yaw']['data'] = {'yaw': yaw}
+            _topics['headset/yaw']['timestamp'] = time.time()
+        _notify_sse_clients('headset/yaw', {'yaw': yaw})
+
+        logger.info(f"Headset yaw updated: {yaw:.2f}")
+        return {'status': 'ok', 'yaw': yaw}, 200
+
+    except Exception as e:
+        logger.error(f"Headset yaw update error: {e}")
+        return {'status': 'error', 'message': str(e)}, 500
+
+
+@app.route('/api/headset/yaw', methods=['GET'])
+def get_headset_yaw():
+    """Return last known headset yaw"""
+    try:
+        if shared_state is None or 'headset_yaw' not in shared_state:
+            return {'status': 'error', 'message': 'Headset yaw not available'}, 404
+
+        yaw = shared_state.get('headset_yaw', 0.0)
+        timestamp = shared_state.get('last_headset_update', 0)
+
+        return {
+            'status': 'ok',
+            'yaw': yaw,
+            'timestamp': timestamp
+        }, 200
+
+    except Exception as e:
+        logger.error(f"Get headset yaw error: {e}")
+        return {'status': 'error', 'message': str(e)}, 500
+
 
 # ============================================================================
 # AI WORKER PROCESS MANAGEMENT
