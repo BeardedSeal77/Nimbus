@@ -781,6 +781,61 @@ def get_headset_yaw():
 
 
 # ============================================================================
+# HUD MESSAGE ENDPOINTS
+# ============================================================================
+
+@app.route('/hud/message', methods=['POST'])
+def set_hud_message():
+    """Set or broadcast a short HUD message (for Unity display)"""
+    try:
+        data = request.get_json()
+        message = data.get('message', '').strip()
+
+        if not message:
+            return {'status': 'error', 'message': 'Message cannot be empty'}, 400
+
+        # Store in shared state (so it persists briefly)
+        if shared_state is not None:
+            shared_state['hud_message'] = {
+                'text': message,
+                'timestamp': time.time()
+            }
+
+        # Publish to message broker so subscribers can receive it
+        with _topics_lock:
+            _topics['hud/message']['data'] = {'message': message, 'timestamp': time.time()}
+            _topics['hud/message']['timestamp'] = time.time()
+
+        _notify_sse_clients('hud/message', {'message': message})
+
+        logger.info(f"HUD message set: {message}")
+        return {'status': 'ok', 'message': message}, 200
+
+    except Exception as e:
+        logger.error(f"HUD message error: {e}")
+        return {'status': 'error', 'message': str(e)}, 500
+
+
+@app.route('/hud/message', methods=['GET'])
+def get_hud_message():
+    """Retrieve the latest HUD message (for Unity polling)"""
+    try:
+        if shared_state is None or 'hud_message' not in shared_state:
+            return {'status': 'ok', 'message': None}, 200
+
+        hud_data = shared_state.get('hud_message', {})
+        return {
+            'status': 'ok',
+            'message': hud_data.get('text'),
+            'timestamp': hud_data.get('timestamp')
+        }, 200
+
+    except Exception as e:
+        logger.error(f"Get HUD message error: {e}")
+        return {'status': 'error', 'message': str(e)}, 500
+
+
+# ============================================================================
 # AI WORKER PROCESS MANAGEMENT
 # ============================================================================
 

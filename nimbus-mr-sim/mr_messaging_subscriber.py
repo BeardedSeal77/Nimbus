@@ -3,9 +3,11 @@ import json
 import time
 import random
 import threading
+import requests
 
 # TCP server settings
 TCP_PORT = 8889  # same port Unity connects to
+HUD_ENDPOINT = "http://127.0.0.1:5000/hud/message"
 MESSAGES = [
     "Drone taking off",
     "Drone landing",
@@ -19,6 +21,7 @@ class DroneMessageServer:
         self.conn = None
         self.running = True
         self.lock = threading.Lock()
+        self.last_message = None
 
     def start_tcp_server(self):
         # Create TCP server and wait for Unity
@@ -48,32 +51,45 @@ class DroneMessageServer:
                     self.conn = None
                     return False
 
-    def send_random_messages(self):
+    def poll_hud_message(self):
+        """Poll endpoint for new messages"""
+        try:
+            response = requests.get(HUD_ENDPOINT, timeout = 2)
+            if response.status_code == 200:
+                data = response.json()
+                return data.get("message")
+        except requests.RequestException as e:
+            print("[HUD] Connection error:",e)
+        return None
+
+    def message_watcher(self):
+        """Forever checks for new messages from flask"""
         while self.running:
             if not self.conn:
                 self.start_tcp_server()
 
-            message = random.choice(MESSAGES)
-            msg_json = json.dumps({"drone_message": message}) + "\n"
-            try:
-                success = self.send_to_unity(msg_json)
-                if success:
-                    print("[SENT TO UNITY]", msg_json.strip())
-
-            except Exception as e:
-                print("[MESSAGING] Error:", e)
-                if self.conn:
-                    try:
-                        self.conn.close()
-                    except:
-                        pass
-                    self.conn = None
-            time.sleep(6)  # send every x seconds
+            message = self.poll_hud_message()
+            if message and message != self.last_message:
+                msg_json = json.dumps({"drone_message": message})+"\n"
+                
+                try:
+                    success = self.send_to_unity(msg_json)
+                    if success:
+                        print("[SENT TO UNITY]", msg_json.strip())
+                except Exception as e:
+                    print("[MESSAGING] Error:", e)
+                    if self.conn:
+                        try:
+                            self.conn.close()
+                        except:
+                            pass
+                        self.conn = None
+                time.sleep(2)  # send every x seconds
 
     def start(self):
         self.start_tcp_server()
 
-        messaging_thread = threading.Thread(target=self.send_random_messages, daemon=True)
+        messaging_thread = threading.Thread(target=self.message_watcher, daemon=True)
         messaging_thread.start()
 
         try:
