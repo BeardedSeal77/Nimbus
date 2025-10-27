@@ -175,6 +175,8 @@ class DroneState:
         self.mode = 'MANUAL'  # MANUAL, AUTO, RETURNING_HOME, LANDING, TAKEOFF
         self.target_altitude = CONFIG['TAKEOFF_ALTITUDE']
 
+        self.global_intent = None
+
     def update(self, x, y, z, roll, pitch, yaw, roll_vel, pitch_vel, yaw_vel, current_time):
         """Update drone state with current sensor readings"""
         # Update position
@@ -741,6 +743,9 @@ class Mavic2ProROS2Controller(Robot):
                 data = response.json()
                 if data.get('has_position') and data.get('object_position'):
                     self.object_absolute_position = data['object_position']
+                    self.global_intent = data['intent']
+                else:
+                    self.object_absolute_position = None
         except:
             pass
 
@@ -789,6 +794,17 @@ class Mavic2ProROS2Controller(Robot):
         if at_target:
             print(f"[AUTO] Arrived at target!")
             self.autonomous_mode = False
+            # Send message to Flask HUD endpoint
+            try:
+                import requests
+                requests.post(
+                    "http://127.0.0.1:5000/hud/message",
+                    json={"message": "Arrived at target!"}, 
+                    timeout=1
+                )
+                print("[HUD] Sent 'Arrived at target!' message.")
+            except Exception as e:
+                print(f"[HUD] Failed to send message: {e}")
         else:
             print(f"[AUTO] Dist: {distance:.2f}m, Heading: {heading_error_deg:+.1f}deg, Vel: {velocity_magnitude:.2f}m/s")
 
@@ -962,7 +978,7 @@ class Mavic2ProROS2Controller(Robot):
                 key = self.keyboard.getKey()
 
             # Override with autonomous navigation if active
-            if self.autonomous_mode and self.object_absolute_position:
+            if self.autonomous_mode and self.object_absolute_position and self.global_intent.lower() == 'go':
                 self.target_yaw_disturbance = nav_yaw
                 self.target_pitch_disturbance = nav_pitch
                 self.target_roll_disturbance = nav_roll

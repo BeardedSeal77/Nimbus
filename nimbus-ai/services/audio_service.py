@@ -10,6 +10,7 @@ import pyaudio
 import sys
 import os
 from queue import Queue
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -128,21 +129,37 @@ class AudioService:
 
             if self.app:
                 with self.app.config['STATE_LOCK']:
-                    if result['intent']:
-                        self.app.config['GLOBAL_INTENT'] = result['intent']
-                        if hasattr(self.app, 'shared_state'):
-                            self.app.shared_state['global_intent'] = result['intent']
-                            # Trigger object position calculation if intent is 'go'
-                            if result['intent'].lower() == 'go':
-                                self.app.shared_state['calculate_position_trigger'] = True
-                                logger.info("Position calculation trigger SET (intent='go')")
+                    # if result['intent']:
+                    self.app.config['GLOBAL_INTENT'] = result['intent']
+                    if hasattr(self.app, 'shared_state'):
+                        self.app.shared_state['global_intent'] = result['intent']
+                        # Trigger object position calculation if intent is 'go'
+                        if result['intent'].lower() == 'go':
+                            self.app.shared_state['calculate_position_trigger'] = True
+                            logger.info("Position calculation trigger SET (intent='go')")
 
-                    if result['object']:
-                        self.app.config['GLOBAL_OBJECT'] = result['object']
-                        if hasattr(self.app, 'shared_state'):
-                            self.app.shared_state['global_object'] = result['object']
-                            # Also update target_object for UI display
-                            self.app.shared_state['target_object'] = result['object']
+                    # if result['object']:
+                    self.app.config['GLOBAL_OBJECT'] = result['object']
+                    if hasattr(self.app, 'shared_state'):
+                        self.app.shared_state['global_object'] = result['object']
+                        # Also update target_object for UI display
+                        self.app.shared_state['target_object'] = result['object']
+                    
+                    # if no object detected, set position to none
+                    if not result['object']:
+                        self.app.shared_state['object_absolute_position'] = None
+
+                    # Sets hud message
+                    if result['intent'].lower() == 'go' and (not result['object'] or result['object'].lower() == 'none'):
+                        self.app.shared_state['hud_message'] = {
+                            'text': "No such object detected, please repeat!",
+                            'timestamp': time.time()
+                        }
+                    if not result['intent'] or result['intent'] == 'none':
+                        self.app.shared_state['hud_message'] = {
+                            'text': "No intent, please repeat!",
+                            'timestamp': time.time()
+                        }
 
                 logger.info(f"Updated globals: intent='{result['intent']}', object='{result['object']}'")
 
