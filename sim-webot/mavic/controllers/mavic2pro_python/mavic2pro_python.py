@@ -24,6 +24,7 @@ import base64
 import io
 import queue
 import requests
+import math
 from http.server import BaseHTTPRequestHandler, HTTPServer
 try:
     import websocket
@@ -660,7 +661,6 @@ class Mavic2ProROS2Controller(Robot):
         self.ros2.publish("/drone/altitude", altitude_msg)
 
         # Compute facing vector from yaw (forward direction in XY plane)
-        import math
         facing_x = math.cos(yaw)
         facing_y = math.sin(yaw)
         facing_z = 0.0  # Assuming level flight for forward direction
@@ -679,7 +679,6 @@ class Mavic2ProROS2Controller(Robot):
         """Publish complete drone state to Nimbus Hub (fast HTTP)"""
         try:
             # Compute facing vector from yaw
-            import math
             yaw = self.state.orientation['yaw']
             facing_x = math.cos(yaw)
             facing_y = math.sin(yaw)
@@ -728,6 +727,10 @@ class Mavic2ProROS2Controller(Robot):
         target_pos = None
         flying_to_target = False
 
+        # Yaw mode
+        self.headset_yaw_enabled = False
+        self.headset_offset = 0
+
         # Start video stream server
         self.video_server.start()
 
@@ -759,6 +762,7 @@ class Mavic2ProROS2Controller(Robot):
         print("- Numpad 6: camera pan right")
         print("- H: return home and land")
         print("- L: land at current position")
+        print("- Z: activate or deactivate headset yaw control")
 
         last_publish_time = 0
         last_hub_publish_time = 0
@@ -772,6 +776,8 @@ class Mavic2ProROS2Controller(Robot):
             roll, pitch, yaw = self.imu.getRollPitchYaw()
             x_pos, y_pos, altitude = self.gps.getValues()
             roll_velocity, pitch_velocity, yaw_velocity = self.gyro.getValues()
+
+            # print("drone yaw: "+str(yaw))
 
             # Update drone state
             self.state.update(x_pos, y_pos, altitude, roll, pitch, yaw,
@@ -860,6 +866,26 @@ class Mavic2ProROS2Controller(Robot):
                     self.camera_manual_roll -= CONFIG['CAMERA_MANUAL_INCREMENT']
                     print(f"Camera roll: {self.camera_manual_roll:.3f} rad")
 
+                # Headset Yaw enable or disable
+                elif key == ord('Z'):
+                    time.sleep(0.1)
+                    self.headset_yaw_enabled = not self.headset_yaw_enabled
+                    status = "ENABLED" if self.headset_yaw_enabled else "DISABLED"
+                    print(f"Headset yaw control {status}")
+
+                    headset_data = self.get_headset_yaw()
+                    if headset_data and headset_data.get("status") == "ok":
+                        headset_yaw = headset_data.get("yaw", 0.0)
+                        headset_yaw_rad = math.radians(headset_yaw)
+                        drone_yaw_rad = yaw
+
+                        drone_yaw_rad = (drone_yaw_rad + math.pi) % (2*math.pi) - math.pi
+                        headset_yaw_rad = (headset_yaw_rad + math.pi) % (2*math.pi) - math.pi
+
+                        self.headset_offset = drone_yaw_rad - headset_yaw_rad
+                        print(f"Headset yaw control ENABLED — offset = {self.headset_offset:.3f} rad")
+
+
                 # Debug: print unknown keys
                 elif key not in [Keyboard.UP, Keyboard.DOWN, Keyboard.LEFT, Keyboard.RIGHT]:
                     if key > 0 and key < 500:  # Reasonable key range
@@ -876,6 +902,47 @@ class Mavic2ProROS2Controller(Robot):
             # Get AI state from hub
             ai_state = self.get_ai_state()
 
+            if self.headset_yaw_enabled:
+                # get headset yaw from the method, decode json to float, convert from degree to radians
+                headset_data = self.get_headset_yaw()
+                if headset_data and headset_data.get("status") == "ok":
+                    headset_yaw_deg = headset_data.get("yaw", 0.0)
+                    headset_yaw_rad = math.radians(headset_yaw_deg)
+                    # apply offset
+                    desired_yaw = -headset_yaw_rad + self.headset_offset
+                    # normalize to -pi to pi
+                    desired_yaw = (desired_yaw + math.pi) % (2*math.pi) - math.pi
+
+                    yaw_error = desired_yaw - yaw
+                    yaw_error = (yaw_error + math.pi) % (2*math.pi) - math.pi
+
+                     # Initialize previous error if first run
+                    if not hasattr(self, "prev_yaw_error"):
+                        self.prev_yaw_error = 0.0
+
+                    # Control loop interval (adjust if different)
+                    dt = 0.02  # seconds
+
+                    # PD controller gains
+                    Kp = 2.0  # proportional
+                    Kd = 0.5  # derivative (damping)
+
+                    # Derivative term
+                    derivative = (yaw_error - self.prev_yaw_error) / dt
+
+                    # Compute yaw disturbance
+                    self.target_yaw_disturbance = clamp(Kp * yaw_error + Kd * derivative, -2.0, 2.0)
+                    # yaw_input = clamp(Kp * yaw_error + Kd * derivative, -2.0, 2.0)
+
+                    # Update previous error for next iteration
+                    self.prev_yaw_error = yaw_error
+
+                    # small deadzone to stop jitter
+                    if abs(yaw_error) < 0.1:  # ~0.5 degrees
+                        self.target_yaw_disturbance = 0.0
+                    
+
+
             if ai_state is not None:
                 # The AI result data is inside ai_state["ai_results"]
                 results = ai_state.get("ai_results", {})
@@ -891,7 +958,6 @@ class Mavic2ProROS2Controller(Robot):
             
             if flying_to_target:
                 if flying_to_target and target_pos is not None:
-                    print("in core logic")
                     # --- PID PARAMETERS ---
                     Kp = 0.4
                     Ki = 0.0
@@ -910,8 +976,7 @@ class Mavic2ProROS2Controller(Robot):
                     error_x = target_pos['x'] - self.state.position['x']   # forward/back
                     error_y = target_pos['y'] - self.state.position['y']   # left/right
 
-                    # YAW CORRECTION
-                    import math
+                    # YAW CORRECTIONs
 
                     print("yaw: "+str(yaw))
                     cos_yaw = math.cos(-yaw)
@@ -948,7 +1013,7 @@ class Mavic2ProROS2Controller(Robot):
                     self.target_pitch_disturbance = -control_x * SCALE   # Negative: forward in world space usually = negative pitch
                     self.target_roll_disturbance = control_y * SCALE
 
-                    print(f"[PID] target_pitch={self.target_pitch_disturbance:.2f}, target_roll={self.target_roll_disturbance:.2f}")
+                    # print(f"[PID] target_pitch={self.target_pitch_disturbance:.2f}, target_roll={self.target_roll_disturbance:.2f}")
 
             # Smooth ramping of disturbances (interpolate current toward target)
             dt = self.time_step / 1000.0  # Convert ms to seconds
@@ -985,9 +1050,9 @@ class Mavic2ProROS2Controller(Robot):
 
             # PID control with damping
             # Roll/Pitch: stronger P gain + velocity damping + disturbance input
-            print("roll_disturbance: "+str(roll_disturbance))
-            print("pitch_disturbance: "+str(pitch_disturbance))
-            print("target object coordinates: "+str(target_pos))
+            # print("roll_disturbance: "+str(roll_disturbance))
+            # print("pitch_disturbance: "+str(pitch_disturbance))
+            # print("target object coordinates: "+str(target_pos))
             roll_input = CONFIG['K_ROLL_P'] * clamp(roll, -1.0, 1.0) + roll_velocity + roll_disturbance
             pitch_input = CONFIG['K_PITCH_P'] * clamp(pitch, -1.0, 1.0) + pitch_velocity + pitch_disturbance
             yaw_input = yaw_disturbance
@@ -1005,10 +1070,11 @@ class Mavic2ProROS2Controller(Robot):
             base_thrust = CONFIG['K_VERTICAL_THRUST'] + vertical_input
 
             # Calculate raw motor commands
-            front_left_motor_input = base_thrust - roll_input + pitch_input - yaw_input
-            front_right_motor_input = base_thrust + roll_input + pitch_input + yaw_input
-            rear_left_motor_input = base_thrust - roll_input - pitch_input + yaw_input
-            rear_right_motor_input = base_thrust + roll_input - pitch_input - yaw_input
+            yaw_gain = 1.5
+            front_left_motor_input = base_thrust - roll_input + pitch_input - yaw_input*yaw_gain
+            front_right_motor_input = base_thrust + roll_input + pitch_input + yaw_input*yaw_gain
+            rear_left_motor_input = base_thrust - roll_input - pitch_input + yaw_input*yaw_gain
+            rear_right_motor_input = base_thrust + roll_input - pitch_input - yaw_input*yaw_gain
 
             # Limit differential from base thrust to prevent overcorrection
             max_diff = CONFIG['MAX_MOTOR_DIFFERENTIAL']
@@ -1058,6 +1124,16 @@ class Mavic2ProROS2Controller(Robot):
         """Fetch AI results from hub"""
         try:
             response = requests.get(f"{CONFIG['HUB_URL']}/api/debug/ai_state", timeout=0.01)
+            if response.status_code == 200:
+                return response.json()
+        except Exception:
+            pass
+        return None
+    
+    def get_headset_yaw(self):
+        """Fetch headset yaw from hub"""
+        try:
+            response = requests.get(f"{CONFIG['HUB_URL']}/api/headset/yaw", timeout=0.01)
             if response.status_code == 200:
                 return response.json()
         except Exception:
