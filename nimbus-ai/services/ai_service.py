@@ -45,7 +45,12 @@ class AIService:
         self.detection_counter = 0
         self.successful_detection_counter = 0  # Only successful object detections
         self.detection_history = []  # Sliding window of last 10 detection results (True/False)
-        
+
+        # Position calculation state
+        self.position_calculated = False
+        self.previous_intent = ''
+        self.previous_object = ''
+
     def reset_depth_collection(self):
         """Reset depth collection when triggered from web interface"""
         self.successful_detection_counter = 0
@@ -111,12 +116,22 @@ class AIService:
         """Main AI processing loop"""
         logger.info("AI processing loop started with depth integration")
         last_processing_time = 0
-        
+
         while self.running and self.app:
             try:
                 current_time = time.time() * 1000
                 interval = self.app.config['FRAME_PROCESSING_INTERVAL_MS']
-                
+
+                # Check for intent or object changes - reset position calculation flag
+                current_intent = self.app.config.get('GLOBAL_INTENT', '')
+                current_object = self.app.config.get('GLOBAL_OBJECT', '')
+
+                if current_intent != self.previous_intent or current_object != self.previous_object:
+                    logger.info(f"Intent/Object changed ('{self.previous_intent}' -> '{current_intent}', '{self.previous_object}' -> '{current_object}') - resetting position calculation")
+                    self.position_calculated = False
+                    self.previous_intent = current_intent
+                    self.previous_object = current_object
+
                 # Check if it's time for processing
                 if (current_time - last_processing_time) >= interval:
                     try:
@@ -220,9 +235,10 @@ class AIService:
         else:
             logger.debug("Object detection busy, skipping frame")
     
-    def _calculate_trig_depth(self, target_object):
+    def _calculate_trig_depth(self, target_object, detection_result=None):
         """
         Calculate distance using simulation ground truth (TRIG method)
+        Also calculates drone-relative delta XY for navigation
         Returns None if calculation fails
         """
         try:
@@ -237,6 +253,7 @@ class AIService:
                 return None
 
             drone_pos = drone_telemetry.get('position', {})
+            drone_orientation = drone_telemetry.get('orientation', {})
             world_objects = drone_telemetry.get('world_objects', {})
 
             if not drone_pos:
@@ -269,21 +286,50 @@ class AIService:
                 logger.warning(f"TRIG depth: Object '{webots_name}' has no position data")
                 return None
 
-            # Calculate Euclidean distance
+            # Calculate world-frame deltas
             try:
-                dx = float(object_pos.get('x', 0)) - float(drone_pos.get('x', 0))
-                dy = float(object_pos.get('y', 0)) - float(drone_pos.get('y', 0))
-                dz = float(object_pos.get('z', 0)) - float(drone_pos.get('z', 0))
-                distance = math.sqrt(dx**2 + dy**2 + dz**2)
+                world_dx = float(object_pos.get('x', 0)) - float(drone_pos.get('x', 0))
+                world_dy = float(object_pos.get('y', 0)) - float(drone_pos.get('y', 0))
+                world_dz = float(object_pos.get('z', 0)) - float(drone_pos.get('z', 0))
+                distance = math.sqrt(world_dx**2 + world_dy**2 + world_dz**2)
             except (TypeError, ValueError) as calc_error:
                 logger.error(f"TRIG depth: Distance calculation error: {calc_error}")
                 return None
 
-            logger.info(f"TRIG depth: {distance:.2f}m for {target_object} -> {webots_name}")
+            # Transform to drone-relative coordinates
+            drone_yaw = float(drone_orientation.get('yaw', 0))
+
+            # Rotate world deltas into drone frame
+            # forward_delta: positive = object is in front of drone
+            # lateral_delta: positive = object is to the right of drone
+            # Standard 2D rotation: [x', y'] = [x*cos - y*sin, x*sin + y*cos]
+            forward_delta = world_dx * math.cos(drone_yaw) + world_dy * math.sin(drone_yaw)
+            lateral_delta = -world_dx * math.sin(drone_yaw) + world_dy * math.cos(drone_yaw)
+
+            logger.debug(f"Yaw: {math.degrees(drone_yaw):.1f}°, world_dx={world_dx:.2f}, world_dy={world_dy:.2f} → forward={forward_delta:.2f}, lateral={lateral_delta:.2f}")
+
+            # Optionally use bounding box for lateral refinement (disabled for now)
+            # if detection_result:
+            #     try:
+            #         bbox_center_x = detection_result.get('x', 0) + detection_result.get('width', 0) / 2
+            #         frame_width = 640
+            #         lateral_pixel_offset = (bbox_center_x - frame_width/2) / (frame_width/2)
+            #         camera_fov_deg = 60
+            #         lateral_angle_offset_deg = lateral_pixel_offset * (camera_fov_deg / 2)
+            #         lateral_offset_m = distance * math.tan(math.radians(lateral_angle_offset_deg))
+            #         lateral_delta += lateral_offset_m
+            #         logger.debug(f"Lateral offset from bbox: {lateral_offset_m:.2f}m")
+            #     except Exception as bbox_error:
+            #         logger.warning(f"Bounding box lateral calculation failed: {bbox_error}")
+
+            logger.info(f"TRIG depth: {distance:.2f}m, delta_x={forward_delta:.2f}m, delta_y={lateral_delta:.2f}m for {target_object}")
 
             return {
                 'distance': distance,
                 'method': 'TRIG',
+                'delta_x': forward_delta,
+                'delta_y': lateral_delta,
+                'delta_z': world_dz,
                 'object_position': object_pos,
                 'drone_position': drone_pos
             }
@@ -307,16 +353,49 @@ class AIService:
                 logger.info(f"  → TRIG branch selected")
                 target_object = self.app.config.get('GLOBAL_OBJECT', 'car')
                 logger.info(f"  → TRIG: Attempting depth calc for {target_object}")
-                depth_result = self._calculate_trig_depth(target_object)
+                depth_result = self._calculate_trig_depth(target_object, detection_result)
 
                 if depth_result:
                     logger.info(f"TRIG depth calculated: {depth_result['distance']:.2f}m, counter={self.successful_detection_counter}/10")
 
-                    # Require 10 successful detections before reporting distance
+                    # Always update navigation target for continuous feedback
+                    if hasattr(self.app, 'shared_state'):
+                        self.app.shared_state['navigation_target'] = {
+                            'delta_x': depth_result['delta_x'],
+                            'delta_y': depth_result['delta_y'],
+                            'delta_z': depth_result['delta_z'],
+                            'distance': depth_result['distance'],
+                            'object_name': target_object,
+                            'timestamp': time.time()
+                        }
+                        logger.debug(f"Navigation target updated: dx={depth_result['delta_x']:.2f}m, dy={depth_result['delta_y']:.2f}m")
+
+                    # Check if we should set object position (trigger set by voice command)
+                    trigger = self.app.shared_state.get('calculate_position_trigger', False) if hasattr(self.app, 'shared_state') else False
+                    if trigger:
+                        try:
+                            object_pos = depth_result.get('object_position')
+                            if object_pos:
+                                position = {
+                                    'x': round(float(object_pos['x']), 3),
+                                    'y': round(float(object_pos['y']), 3),
+                                    'z': round(float(object_pos['z']), 3)
+                                }
+
+                                self.app.shared_state['object_absolute_position'] = position
+                                self.position_calculated = True
+                                self.app.shared_state['calculate_position_trigger'] = False
+                                logger.info(f"Object absolute position SET from world_objects: {position}")
+                            else:
+                                logger.warning("TRIG depth result missing object_position")
+
+                        except Exception as pos_err:
+                            logger.error(f"Position setting failed: {pos_err}", exc_info=True)
+
+                    # Require 10 successful detections before reporting distance to UI
                     if self.successful_detection_counter >= 10:
                         with self.app.config['STATE_LOCK']:
                             self.app.config['GLOBAL_TARGET_DISTANCE'] = depth_result['distance']
-                            # Update hub's shared state
                             if hasattr(self.app, 'shared_state'):
                                 self.app.shared_state['global_target_distance'] = depth_result['distance']
 

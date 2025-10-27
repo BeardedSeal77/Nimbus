@@ -4,6 +4,9 @@ import os
 scripts = [
     "mr_video_subscriber.py",
     "mr_yaw_publisher.py",
+    "mr_drone_pose_subscriber.py",
+    "mr_object_pose_subscriber.py",
+    "mr_messaging_subscriber.py",
     "TESTING_detection_publisher.py",
     "TESTING_messaging_publisher.py",
     "TESTING_pos_publisher.py"

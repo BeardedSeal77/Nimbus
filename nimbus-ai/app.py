@@ -101,8 +101,8 @@ def run_ai_worker(shared_state):
 
         # Start video stream service
         if hasattr(video_stream_service, 'start_service'):
-            video_stream_service.start_service(worker_config, stream_url='http://localhost:8080/video')
-            logger.info("Video stream service started (MJPEG from Webots)")
+            video_stream_service.start_service(worker_config)
+            logger.info("Video stream service started (reading from shared state)")
 
         # Start AI service
         if hasattr(ai_service, 'start_service'):

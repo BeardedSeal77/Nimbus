@@ -37,10 +37,10 @@ def main():
 
 
     object_detections = [
-        {"label": "Tree", "x": 3.2, "y": -1.5, "z": 0.0},
-        {"label": "Car", "x": -2.0, "y": 4.1, "z": 0.0},
-        {"label": "Person", "x": 1.0, "y": 0.5, "z": 0.0},
-        {"label": "Dog", "x": -3.4, "y": -2.2, "z": 0.0},
+        {"label": "Tree", "x": -2, "y": 2, "z": 0.0},
+        {"label": "Car", "x": 2, "y": 2, "z": 0.0},
+        {"label": "Person", "x": 2, "y": -2, "z": 0.0},
+        {"label": "Dog", "x": -2, "y": -2, "z": 0.0},
         {"label": "Bench", "x": 0.0, "y": 6.0, "z": 0.0}
     ]
 

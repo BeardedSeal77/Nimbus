@@ -132,6 +132,10 @@ class AudioService:
                         self.app.config['GLOBAL_INTENT'] = result['intent']
                         if hasattr(self.app, 'shared_state'):
                             self.app.shared_state['global_intent'] = result['intent']
+                            # Trigger object position calculation if intent is 'go'
+                            if result['intent'].lower() == 'go':
+                                self.app.shared_state['calculate_position_trigger'] = True
+                                logger.info("Position calculation trigger SET (intent='go')")
 
                     if result['object']:
                         self.app.config['GLOBAL_OBJECT'] = result['object']
