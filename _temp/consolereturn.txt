@@ -1,0 +1,17 @@
+[AUTO] Moving (1.03m remaining, stopping_dist=1.06m, vel=1.43m/s)
+[AUTO] Moving (1.02m remaining, stopping_dist=1.05m, vel=1.43m/s)
+[AUTO] Moving (1.01m remaining, stopping_dist=1.04m, vel=1.42m/s)
+Traceback (most recent call last):
+  File "C:\Users\edcul\Documents\Work\PRJ\Nimbus\sim-webot\mavic\controllers\mavic2pro_python\mavic2pro_python.py", line 1073, in <module>
+    controller.run()
+  File "C:\Users\edcul\Documents\Work\PRJ\Nimbus\sim-webot\mavic\controllers\mavic2pro_python\mavic2pro_python.py", line 896, in run
+    nav_yaw, nav_pitch, nav_roll = self.get_navigation_disturbances()
+                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\edcul\Documents\Work\PRJ\Nimbus\sim-webot\mavic\controllers\mavic2pro_python\mavic2pro_python.py", line 773, in get_navigation_disturbances
+    result = self.navigation_controller.update(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\edcul\Documents\Work\PRJ\Nimbus\sim-webot\mavic\controllers\mavic2pro_python\PID.py", line 190, in update
+    'stopping_distance': stopping_distance if self.heading_locked else 0,
+                         ^^^^^^^^^^^^^^^^^
+UnboundLocalError: cannot access local variable 'stopping_distance' where it is not associated with a value
+WARNING: 'mavic2pro_python' controller exited with status: 1.

@@ -1,0 +1,132 @@
+commit 97e75a49518fe37f4b2a0e856fbc13615e857826
+Author: Koewkie <darrat199@gmail.com>
+Date:   Wed Oct 8 20:45:45 2025 +0200
+
+    ai state endoint, PID controller works ish
+
+diff --git a/sim-webot/mavic/controllers/mavic2pro_python/mavic2pro_python.py b/sim-webot/mavic/controllers/mavic2pro_python/mavic2pro_python.py
+index ce246be..fee2de8 100644
+--- a/sim-webot/mavic/controllers/mavic2pro_python/mavic2pro_python.py
++++ b/sim-webot/mavic/controllers/mavic2pro_python/mavic2pro_python.py
+@@ -725,6 +725,9 @@ class Mavic2ProROS2Controller(Robot):
+             print(f"  - {obj_name}: ({pos['x']:.2f}, {pos['y']:.2f}, {pos['z']:.2f})")
+         print("=" * 60)
+ 
++        target_pos = None
++        flying_to_target = False
++
+         # Start video stream server
+         self.video_server.start()
+ 
+@@ -869,6 +872,83 @@ class Mavic2ProROS2Controller(Robot):
+                     self.land()
+ 
+                 key = self.keyboard.getKey()
++            
++            # Get AI state from hub
++            ai_state = self.get_ai_state()
++
++            if ai_state is not None:
++                # The AI result data is inside ai_state["ai_results"]
++                results = ai_state.get("ai_results", {})
++
++                # Check if depth info (object + drone positions) is available
++                if results.get("processing_status") == "object_detected_with_depth":
++                    if results.get("intent") == "go":
++                        flying_to_target = True
++                        depth_result = results.get("depth_result", {})
++                        target_pos = depth_result.get("object_position")
++                    else:
++                        flying_to_target = False
++            
++            if flying_to_target:
++                if flying_to_target and target_pos is not None:
++                    print("in core logic")
++                    # --- PID PARAMETERS ---
++                    Kp = 0.4
++                    Ki = 0.0
++                    Kd = 0.15
++                    SCALE = 1.0        # scale PID output to disturbance range
++                    MAX_DISTURB = 4.0  # maximum allowed pitch/roll disturbance
++
++                    # Initialize PID memory if missing
++                    if not hasattr(self, 'pid_prev_error'):
++                        self.pid_prev_error = {'x': 0.0, 'y': 0.0}
++                        self.pid_integral = {'x': 0.0, 'y': 0.0}
++
++                    dt = self.time_step / 1000.0  # convert ms to seconds
++
++                    # --- POSITION ERROR (desired - current) ---
++                    error_x = target_pos['x'] - self.state.position['x']   # forward/back
++                    error_y = target_pos['y'] - self.state.position['y']   # left/right
++
++                    # YAW CORRECTION
++                    import math
++
++                    print("yaw: "+str(yaw))
++                    cos_yaw = math.cos(-yaw)
++                    sin_yaw = math.sin(-yaw)
++
++                    local_error_x = cos_yaw*error_x-sin_yaw*error_y
++                    local_error_y = sin_yaw * error_x + cos_yaw * error_y
++
++                    error_x = local_error_x
++                    error_y = local_error_y
++
++                    # --- INTEGRAL TERM ---
++                    self.pid_integral['x'] += error_x * dt
++                    self.pid_integral['y'] += error_y * dt
++
++                    # --- DERIVATIVE TERM ---
++                    deriv_x = (error_x - self.pid_prev_error['x']) / dt
++                    deriv_y = (error_y - self.pid_prev_error['y']) / dt
++
++                    # --- PID OUTPUT ---
++                    control_x = Kp * error_x + Ki * self.pid_integral['x'] + Kd * deriv_x
++                    control_y = Kp * error_y + Ki * self.pid_integral['y'] + Kd * deriv_y
++
++                    # --- CLAMP OUTPUTS (to avoid flipping) ---
++                    control_x = max(-MAX_DISTURB, min(MAX_DISTURB, control_x))
++                    control_y = max(-MAX_DISTURB, min(MAX_DISTURB, control_y))
++
++                    # --- SAVE FOR NEXT LOOP ---
++                    self.pid_prev_error['x'] = error_x
++                    self.pid_prev_error['y'] = error_y
++
++                    # --- APPLY TO DISTURBANCES ---
++                    # Note: x → pitch (forward/back), y → roll (left/right)
++                    self.target_pitch_disturbance = -control_x * SCALE   # Negative: forward in world space usually = negative pitch
++                    self.target_roll_disturbance = control_y * SCALE
++
++                    print(f"[PID] target_pitch={self.target_pitch_disturbance:.2f}, target_roll={self.target_roll_disturbance:.2f}")
+ 
+             # Smooth ramping of disturbances (interpolate current toward target)
+             dt = self.time_step / 1000.0  # Convert ms to seconds
+@@ -905,6 +985,9 @@ class Mavic2ProROS2Controller(Robot):
+ 
+             # PID control with damping
+             # Roll/Pitch: stronger P gain + velocity damping + disturbance input
++            print("roll_disturbance: "+str(roll_disturbance))
++            print("pitch_disturbance: "+str(pitch_disturbance))
++            print("target object coordinates: "+str(target_pos))
+             roll_input = CONFIG['K_ROLL_P'] * clamp(roll, -1.0, 1.0) + roll_velocity + roll_disturbance
+             pitch_input = CONFIG['K_PITCH_P'] * clamp(pitch, -1.0, 1.0) + pitch_velocity + pitch_disturbance
+             yaw_input = yaw_disturbance
+@@ -971,6 +1054,16 @@ class Mavic2ProROS2Controller(Robot):
+         if self.ros2_connected:
+             self.ros2.disconnect()
+ 
++    def get_ai_state(self):
++        """Fetch AI results from hub"""
++        try:
++            response = requests.get(f"{CONFIG['HUB_URL']}/api/debug/ai_state", timeout=0.01)
++            if response.status_code == 200:
++                return response.json()
++        except Exception:
++            pass
++        return None
++
+ 
+ controller = Mavic2ProROS2Controller()
+ controller.run()
+\ No newline at end of file

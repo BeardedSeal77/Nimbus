@@ -24,7 +24,9 @@ import base64
 import io
 import queue
 import requests
-from PID import AltitudeController, NavigationController, clamp
+from PID import AltitudeController, clamp
+from PIDYaw import YawController
+from PIDMovement import MovementController
 try:
     import websocket
 except ImportError:
@@ -86,8 +88,8 @@ CONFIG = {
 
     # Simulation and Autonomous Control
     'SIMULATION_MODE': True,
-    'NAV_HEADING_KP': 0.8,
-    'NAV_HEADING_KD': 0.6,
+    'NAV_HEADING_KP': 0.4,
+    'NAV_HEADING_KD': 0.8,
     'NAV_DISTANCE_KP': 2.0,
     'NAV_DISTANCE_KD': 0.5,
     'NAV_HEADING_THRESHOLD_DEG': 3.0,
@@ -504,15 +506,19 @@ class Mavic2ProROS2Controller(Robot):
             offset=CONFIG['K_VERTICAL_OFFSET']
         )
 
-        self.navigation_controller = NavigationController(
-            heading_kp=CONFIG['NAV_HEADING_KP'],
-            heading_kd=CONFIG['NAV_HEADING_KD'],
-            distance_kp=CONFIG['NAV_DISTANCE_KP'],
-            distance_kd=CONFIG['NAV_DISTANCE_KD'],
-            heading_threshold_deg=CONFIG['NAV_HEADING_THRESHOLD_DEG'],
-            distance_threshold_m=CONFIG['NAV_DISTANCE_THRESHOLD_M'],
-            max_yaw=CONFIG['YAW_DISTURBANCE_RIGHT'],
-            max_pitch=abs(CONFIG['PITCH_DISTURBANCE_FORWARD'])
+        self.yaw_controller = YawController(
+            kp=CONFIG['NAV_HEADING_KP'],
+            kd=CONFIG['NAV_HEADING_KD'],
+            max_yaw=abs(CONFIG['YAW_DISTURBANCE_LEFT'])
+        )
+
+        self.movement_controller = MovementController(
+            kp=CONFIG['NAV_DISTANCE_KP'],
+            ki=0.05,
+            kd=CONFIG['NAV_DISTANCE_KD'],
+            max_pitch=abs(CONFIG['PITCH_DISTURBANCE_FORWARD']),
+            max_roll=abs(CONFIG['ROLL_DISTURBANCE_RIGHT']),
+            distance_threshold=CONFIG['NAV_DISTANCE_THRESHOLD_M']
         )
 
         # Navigation state
@@ -739,9 +745,9 @@ class Mavic2ProROS2Controller(Robot):
             pass
 
     def get_navigation_disturbances(self):
-        """Calculate yaw/pitch from object absolute position (if autonomous mode active)"""
+        """Calculate yaw/pitch/roll from object absolute position using simultaneous PIDs"""
         if not self.autonomous_mode or not self.object_absolute_position:
-            return 0.0, 0.0
+            return 0.0, 0.0, 0.0
 
         import math
 
@@ -750,30 +756,43 @@ class Mavic2ProROS2Controller(Robot):
 
         drone_x = self.state.position['x']
         drone_y = self.state.position['y']
+        drone_yaw = self.state.orientation['yaw']
 
         world_dx = obj_x - drone_x
         world_dy = obj_y - drone_y
 
-        drone_yaw = self.state.orientation['yaw']
-
         delta_x = world_dx * math.cos(drone_yaw) + world_dy * math.sin(drone_yaw)
         delta_y = -world_dx * math.sin(drone_yaw) + world_dy * math.cos(drone_yaw)
 
-        result = self.navigation_controller.update(
-            delta_x=delta_x,
-            delta_y=delta_y,
-            dt=self.time_step / 1000.0
+        world_vx = self.state.velocity['x']
+        world_vy = self.state.velocity['y']
+        velocity_x = world_vx * math.cos(drone_yaw) + world_vy * math.sin(drone_yaw)
+        velocity_y = -world_vx * math.sin(drone_yaw) + world_vy * math.cos(drone_yaw)
+
+        accel_x = self.state.acceleration['x']
+        accel_y = self.state.acceleration['y']
+        accel_z = self.state.acceleration['z']
+        accel_magnitude = math.sqrt(accel_x**2 + accel_y**2 + accel_z**2)
+
+        yaw_velocity = self.state.angular_velocity['yaw']
+        dt = self.time_step / 1000.0
+
+        distance = math.sqrt(delta_x**2 + delta_y**2)
+        velocity_magnitude = math.sqrt(velocity_x**2 + velocity_y**2)
+        heading_error_deg = math.degrees(math.atan2(delta_y, delta_x))
+
+        yaw_disturbance = self.yaw_controller.update(delta_x, delta_y, yaw_velocity, dt)
+        pitch_disturbance, roll_disturbance, at_target = self.movement_controller.update(
+            delta_x, delta_y, velocity_x, velocity_y, accel_magnitude, dt
         )
 
-        if result['at_target']:
+        if at_target:
             print(f"[AUTO] Arrived at target!")
             self.autonomous_mode = False
-        elif not result['heading_locked']:
-            print(f"[AUTO] Turning to target (error: {result['heading_error_deg']:.1f} deg)")
         else:
-            print(f"[AUTO] Moving forward ({result['distance']:.2f}m remaining)")
+            print(f"[AUTO] Dist: {distance:.2f}m, Heading: {heading_error_deg:+.1f}deg, Vel: {velocity_magnitude:.2f}m/s")
 
-        return result['yaw_disturbance'], result['pitch_disturbance']
+        return yaw_disturbance, pitch_disturbance, roll_disturbance
 
     def run(self):
         print("=" * 60)
@@ -877,7 +896,7 @@ class Mavic2ProROS2Controller(Robot):
                 self.camera_pitch_motor.setPosition(self.camera_manual_pitch)
 
             # Get navigation disturbances if autonomous
-            nav_yaw, nav_pitch = self.get_navigation_disturbances()
+            nav_yaw, nav_pitch, nav_roll = self.get_navigation_disturbances()
 
             # Handle keyboard input - set target disturbances
             self.target_roll_disturbance = 0.0
@@ -946,6 +965,7 @@ class Mavic2ProROS2Controller(Robot):
             if self.autonomous_mode and self.object_absolute_position:
                 self.target_yaw_disturbance = nav_yaw
                 self.target_pitch_disturbance = nav_pitch
+                self.target_roll_disturbance = nav_roll
 
             # Smooth ramping of disturbances (interpolate current toward target)
             dt = self.time_step / 1000.0  # Convert ms to seconds
