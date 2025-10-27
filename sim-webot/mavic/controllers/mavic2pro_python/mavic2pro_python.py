@@ -175,7 +175,7 @@ class DroneState:
         self.mode = 'MANUAL'  # MANUAL, AUTO, RETURNING_HOME, LANDING, TAKEOFF
         self.target_altitude = CONFIG['TAKEOFF_ALTITUDE']
 
-        self.global_intent = None
+        
 
     def update(self, x, y, z, roll, pitch, yaw, roll_vel, pitch_vel, yaw_vel, current_time):
         """Update drone state with current sensor readings"""
@@ -528,6 +528,10 @@ class Mavic2ProROS2Controller(Robot):
         self.navigation_target = None  # Legacy delta-based (deprecated)
         self.object_absolute_position = None  # World position of target object
 
+        self.global_intent = None
+        self.global_object = None
+        self.last_hud_object = None
+
         self.front_left_motor = self.getDevice("front left propeller")
         self.front_right_motor = self.getDevice("front right propeller")
         self.rear_left_motor = self.getDevice("rear left propeller")
@@ -732,6 +736,18 @@ class Mavic2ProROS2Controller(Robot):
             # Silently fail - don't block control loop
             pass
 
+    def update_hud_message(self, message):
+        try:
+            import requests
+            requests.post(
+                "http://127.0.0.1:5000/hud/message",
+                json={"message": message},
+                timeout=1
+            )
+            print("[HUD] Sent "+message+" message.")
+        except Exception as e:
+            print(f"[HUD] Failed to send HUD message: {e}")
+
     def poll_navigation_target(self):
         """Poll hub for object absolute position from AI"""
         try:
@@ -744,6 +760,7 @@ class Mavic2ProROS2Controller(Robot):
                 if data.get('has_position') and data.get('object_position'):
                     self.object_absolute_position = data['object_position']
                     self.global_intent = data['intent']
+                    self.global_object = data['object_name']
                 else:
                     self.object_absolute_position = None
         except:
@@ -795,16 +812,7 @@ class Mavic2ProROS2Controller(Robot):
             print(f"[AUTO] Arrived at target!")
             self.autonomous_mode = False
             # Send message to Flask HUD endpoint
-            try:
-                import requests
-                requests.post(
-                    "http://127.0.0.1:5000/hud/message",
-                    json={"message": "Arrived at target!"}, 
-                    timeout=1
-                )
-                print("[HUD] Sent 'Arrived at target!' message.")
-            except Exception as e:
-                print(f"[HUD] Failed to send message: {e}")
+            self.update_hud_message("Arrived at target!")        
         else:
             print(f"[AUTO] Dist: {distance:.2f}m, Heading: {heading_error_deg:+.1f}deg, Vel: {velocity_magnitude:.2f}m/s")
 
@@ -982,6 +990,10 @@ class Mavic2ProROS2Controller(Robot):
                 self.target_yaw_disturbance = nav_yaw
                 self.target_pitch_disturbance = nav_pitch
                 self.target_roll_disturbance = nav_roll
+                # Update HUD to show we are moving toward object
+                if self.last_hud_object != self.global_object:
+                    self.update_hud_message("Moving to "+self.global_object)
+                    self.last_hud_object = self.global_object
 
             # Smooth ramping of disturbances (interpolate current toward target)
             dt = self.time_step / 1000.0  # Convert ms to seconds

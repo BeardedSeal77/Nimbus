@@ -295,7 +295,8 @@ def get_object_position():
                 return {
                     'object_position': obj_pos,
                     'has_position': True,
-                    'intent': shared_state.get('global_intent')
+                    'intent': shared_state.get('global_intent'),
+                    'object_name': shared_state.get('global_object')
                 }, 200
         return {'object_position': None, 'has_position': False}, 200
     except Exception as e:
