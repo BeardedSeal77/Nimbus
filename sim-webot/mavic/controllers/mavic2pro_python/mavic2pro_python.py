@@ -24,6 +24,7 @@ import base64
 import io
 import queue
 import requests
+from PID import AltitudeController, NavigationController, clamp
 try:
     import websocket
 except ImportError:
@@ -36,8 +37,7 @@ except ImportError:
     Image = None
 
 
-def clamp(value, value_min, value_max):
-    return min(max(value, value_min), value_max)
+# clamp() function moved to PID.py
 
 
 # ============================================================================
@@ -83,6 +83,16 @@ CONFIG = {
     # Nimbus Hub (Central Communication)
     'HUB_URL': 'http://localhost:5000',
     'HUB_PUBLISH_INTERVAL': 0.01,  # 100Hz (10ms)
+
+    # Simulation and Autonomous Control
+    'SIMULATION_MODE': True,
+    'NAV_HEADING_KP': 0.8,
+    'NAV_HEADING_KD': 0.6,
+    'NAV_DISTANCE_KP': 2.0,
+    'NAV_DISTANCE_KD': 0.5,
+    'NAV_HEADING_THRESHOLD_DEG': 3.0,
+    'NAV_DISTANCE_THRESHOLD_M': 1.0,
+    'NAV_POLL_INTERVAL': 0.1,
 
     # Camera
     'CAMERA_ROLL_FACTOR': -0.115,
@@ -487,6 +497,29 @@ class Mavic2ProROS2Controller(Robot):
         # PID derivative tracking
         self.prev_altitude = 0.0
 
+        # PID Controllers
+        self.altitude_controller = AltitudeController(
+            k_p=CONFIG['K_VERTICAL_P'],
+            k_d=CONFIG['K_VERTICAL_D'],
+            offset=CONFIG['K_VERTICAL_OFFSET']
+        )
+
+        self.navigation_controller = NavigationController(
+            heading_kp=CONFIG['NAV_HEADING_KP'],
+            heading_kd=CONFIG['NAV_HEADING_KD'],
+            distance_kp=CONFIG['NAV_DISTANCE_KP'],
+            distance_kd=CONFIG['NAV_DISTANCE_KD'],
+            heading_threshold_deg=CONFIG['NAV_HEADING_THRESHOLD_DEG'],
+            distance_threshold_m=CONFIG['NAV_DISTANCE_THRESHOLD_M'],
+            max_yaw=CONFIG['YAW_DISTURBANCE_RIGHT'],
+            max_pitch=abs(CONFIG['PITCH_DISTURBANCE_FORWARD'])
+        )
+
+        # Navigation state
+        self.autonomous_mode = False
+        self.navigation_target = None  # Legacy delta-based (deprecated)
+        self.object_absolute_position = None  # World position of target object
+
         self.front_left_motor = self.getDevice("front left propeller")
         self.front_right_motor = self.getDevice("front right propeller")
         self.rear_left_motor = self.getDevice("rear left propeller")
@@ -669,7 +702,15 @@ class Mavic2ProROS2Controller(Robot):
                 'distance_to_home': self.state.distance_to_home(),
                 'connected': True,
                 'timestamp': self.getTime(),
-                'world_objects': WORLD_OBJECTS  # Ground truth object positions for TRIG depth method
+                'world_objects': WORLD_OBJECTS,  # Ground truth object positions for TRIG depth method
+                'simulation': CONFIG['SIMULATION_MODE'],
+                'autonomous_mode': self.autonomous_mode,
+                'navigation_target': self.navigation_target,
+                'camera_config': {
+                    'fov': 0.7854,
+                    'width': self.camera.getWidth(),
+                    'height': self.camera.getHeight()
+                }
             }
 
             # Non-blocking POST to hub
@@ -682,6 +723,57 @@ class Mavic2ProROS2Controller(Robot):
         except Exception as e:
             # Silently fail - don't block control loop
             pass
+
+    def poll_navigation_target(self):
+        """Poll hub for object absolute position from AI"""
+        try:
+            response = requests.get(
+                f"{CONFIG['HUB_URL']}/navigation/object_position",
+                timeout=0.01
+            )
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('has_position') and data.get('object_position'):
+                    self.object_absolute_position = data['object_position']
+        except:
+            pass
+
+    def get_navigation_disturbances(self):
+        """Calculate yaw/pitch from object absolute position (if autonomous mode active)"""
+        if not self.autonomous_mode or not self.object_absolute_position:
+            return 0.0, 0.0
+
+        import math
+
+        obj_x = self.object_absolute_position['x']
+        obj_y = self.object_absolute_position['y']
+
+        drone_x = self.state.position['x']
+        drone_y = self.state.position['y']
+
+        world_dx = obj_x - drone_x
+        world_dy = obj_y - drone_y
+
+        drone_yaw = self.state.orientation['yaw']
+
+        delta_x = world_dx * math.cos(drone_yaw) + world_dy * math.sin(drone_yaw)
+        delta_y = -world_dx * math.sin(drone_yaw) + world_dy * math.cos(drone_yaw)
+
+        result = self.navigation_controller.update(
+            delta_x=delta_x,
+            delta_y=delta_y,
+            dt=self.time_step / 1000.0
+        )
+
+        if result['at_target']:
+            print(f"[AUTO] Arrived at target!")
+            self.autonomous_mode = False
+        elif not result['heading_locked']:
+            print(f"[AUTO] Turning to target (error: {result['heading_error_deg']:.1f} deg)")
+        else:
+            print(f"[AUTO] Moving forward ({result['distance']:.2f}m remaining)")
+
+        return result['yaw_disturbance'], result['pitch_disturbance']
 
     def run(self):
         print("=" * 60)
@@ -727,11 +819,14 @@ class Mavic2ProROS2Controller(Robot):
         print("- Numpad 6: camera pan right")
         print("- H: return home and land")
         print("- L: land at current position")
+        print("- A: toggle autonomous object tracking")
 
         last_publish_time = 0
         last_hub_publish_time = 0
+        last_nav_poll_time = 0
         publish_interval = CONFIG['ROS2_PUBLISH_INTERVAL']
         hub_publish_interval = CONFIG['HUB_PUBLISH_INTERVAL']
+        nav_poll_interval = CONFIG['NAV_POLL_INTERVAL']
 
         while self.step(self.time_step) != -1:
             time_now = self.getTime()
@@ -780,6 +875,9 @@ class Mavic2ProROS2Controller(Robot):
                 # Pure manual control
                 self.camera_roll_motor.setPosition(self.camera_manual_roll)
                 self.camera_pitch_motor.setPosition(self.camera_manual_pitch)
+
+            # Get navigation disturbances if autonomous
+            nav_yaw, nav_pitch = self.get_navigation_disturbances()
 
             # Handle keyboard input - set target disturbances
             self.target_roll_disturbance = 0.0
@@ -838,8 +936,16 @@ class Mavic2ProROS2Controller(Robot):
                     self.go_home()
                 elif key == ord('L'):
                     self.land()
+                elif key == ord('A'):
+                    self.autonomous_mode = not self.autonomous_mode
+                    print(f"[AUTONOMOUS MODE: {'ENABLED' if self.autonomous_mode else 'DISABLED'}]")
 
                 key = self.keyboard.getKey()
+
+            # Override with autonomous navigation if active
+            if self.autonomous_mode and self.object_absolute_position:
+                self.target_yaw_disturbance = nav_yaw
+                self.target_pitch_disturbance = nav_pitch
 
             # Smooth ramping of disturbances (interpolate current toward target)
             dt = self.time_step / 1000.0  # Convert ms to seconds
@@ -881,13 +987,11 @@ class Mavic2ProROS2Controller(Robot):
             yaw_input = yaw_disturbance
 
             # Vertical: PD controller (P + D term for damping)
-            altitude_error = self.state.target_altitude - altitude + CONFIG['K_VERTICAL_OFFSET']
-            altitude_rate = (altitude - self.prev_altitude) / (self.time_step / 1000.0)  # Derivative
-            self.prev_altitude = altitude
-
-            clamped_altitude_error = clamp(altitude_error, -1.0, 1.0)
-            vertical_input = (CONFIG['K_VERTICAL_P'] * pow(clamped_altitude_error, 3.0) -
-                            CONFIG['K_VERTICAL_D'] * altitude_rate)
+            vertical_input = self.altitude_controller.update(
+                current_altitude=altitude,
+                target_altitude=self.state.target_altitude,
+                dt=self.time_step / 1000.0
+            )
 
             # Motor control with differential limiting
             base_thrust = CONFIG['K_VERTICAL_THRUST'] + vertical_input
@@ -929,6 +1033,11 @@ class Mavic2ProROS2Controller(Robot):
             if (time_now - last_hub_publish_time) >= hub_publish_interval:
                 self.publish_to_hub()
                 last_hub_publish_time = time_now
+
+            # Poll navigation target from hub (10Hz)
+            if (time_now - last_nav_poll_time) >= nav_poll_interval:
+                self.poll_navigation_target()
+                last_nav_poll_time = time_now
 
             # Publish to ROS2 at lower frequency (30Hz) - for legacy systems
             if self.ros2_connected and (time_now - last_publish_time) >= publish_interval:

@@ -63,6 +63,11 @@ def init_shared_state():
     shared_state['global_command_status'] = 'none'
     shared_state['global_state_active'] = False
 
+    # Object position calculation (polar to cartesian conversion)
+    shared_state['calculate_position_trigger'] = False  # One-shot trigger
+    shared_state['object_absolute_position'] = None  # Calculated world position
+    shared_state['camera_config'] = None  # Camera FOV and resolution
+
     # Audio configuration
     shared_state['audio_recording'] = False
     shared_state['audio_process_trigger'] = False
@@ -205,6 +210,9 @@ def update_drone_state():
         # Also update shared state for AI worker access
         if shared_state:
             shared_state['drone_telemetry'] = state
+            # Store camera config if present
+            if 'camera_config' in state and shared_state.get('camera_config') is None:
+                shared_state['camera_config'] = state['camera_config']
 
         return {'status': 'ok'}, 200
     except Exception as e:
@@ -250,6 +258,33 @@ def get_drone_state():
         return state, 200
     except Exception as e:
         logger.error(f"Get drone state error: {e}")
+        return {'status': 'error', 'message': str(e)}, 500
+
+@app.route('/navigation/target', methods=['GET'])
+def get_navigation_target():
+    """Return current navigation target from AI detection"""
+    try:
+        if shared_state and 'navigation_target' in shared_state:
+            return {'target': shared_state['navigation_target']}, 200
+        return {'target': None}, 200
+    except Exception as e:
+        logger.error(f"Get navigation target error: {e}")
+        return {'status': 'error', 'message': str(e)}, 500
+
+@app.route('/navigation/object_position', methods=['GET'])
+def get_object_position():
+    """Return absolute object position in world coordinates"""
+    try:
+        if shared_state:
+            obj_pos = shared_state.get('object_absolute_position')
+            if obj_pos:
+                return {
+                    'object_position': obj_pos,
+                    'has_position': True
+                }, 200
+        return {'object_position': None, 'has_position': False}, 200
+    except Exception as e:
+        logger.error(f"Get object position error: {e}")
         return {'status': 'error', 'message': str(e)}, 500
 
 @app.route('/control/command', methods=['POST'])
@@ -418,6 +453,33 @@ def get_drone_telemetry_debug():
         return {'status': 'error', 'message': 'Shared state not initialized'}, 500
     except Exception as e:
         logger.error(f"Debug telemetry error: {e}")
+        return {'status': 'error', 'message': str(e)}, 500
+
+@app.route('/api/debug/position_calculation', methods=['GET'])
+def get_position_calculation_debug():
+    """Debug endpoint to view object position calculation state"""
+    try:
+        if shared_state:
+            status = {
+                'calculate_position_trigger': shared_state.get('calculate_position_trigger', False),
+                'object_absolute_position': shared_state.get('object_absolute_position'),
+                'camera_config': shared_state.get('camera_config'),
+                'global_intent': shared_state.get('global_intent', ''),
+                'global_object': shared_state.get('global_object', ''),
+                'target_object': shared_state.get('target_object', ''),
+                'has_camera_config': shared_state.get('camera_config') is not None,
+                'has_drone_telemetry': shared_state.get('drone_telemetry') is not None
+            }
+
+            if shared_state.get('drone_telemetry'):
+                telemetry = shared_state['drone_telemetry']
+                status['drone_position'] = telemetry.get('position')
+                status['drone_yaw'] = telemetry.get('orientation', {}).get('yaw')
+
+            return jsonify(status), 200
+        return {'status': 'error', 'message': 'Shared state not initialized'}, 500
+    except Exception as e:
+        logger.error(f"Debug position calculation error: {e}")
         return {'status': 'error', 'message': str(e)}, 500
 
 @app.route('/api/debug/depth_status', methods=['GET'])
