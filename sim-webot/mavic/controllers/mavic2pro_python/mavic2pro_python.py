@@ -529,6 +529,9 @@ class Mavic2ProROS2Controller(Robot):
         self.object_absolute_position = None  # World position of target object
 
         self.joystick_yaw = 0
+        self.joystick_pitch = 0
+        self.joystick_roll = 0
+        self.use_joystick = False
 
         self.global_intent = None
         self.global_object = None
@@ -783,6 +786,24 @@ class Mavic2ProROS2Controller(Robot):
         except:
             pass
 
+    def poll_joystick_pitch_roll(self):
+        """Poll hub for joystick pitch and roll"""
+        try:
+            response = requests.get(
+                f"{CONFIG['HUB_URL']}/api/mr/joystick",
+                timeout=0.01
+            )
+            if response.status_code == 200:
+                data = response.json()
+                self.joystick_pitch = data.get('pitch')
+                self.joystick_roll = data.get('roll')
+            else:
+                self.joystick_pitch = 0
+                self.joystick_roll = 0
+                print(response.status_code)
+        except:
+            pass
+
     def get_navigation_disturbances(self):
         """Calculate yaw/pitch/roll from object absolute position using simultaneous PIDs"""
         if not self.autonomous_mode or not self.object_absolute_position:
@@ -880,6 +901,8 @@ class Mavic2ProROS2Controller(Robot):
         print("- H: return home and land")
         print("- L: land at current position")
         print("- A: toggle autonomous object tracking")
+        print("- J: enable joystick controls")
+        print("- K: disables joystick controls")
 
         last_publish_time = 0
         last_hub_publish_time = 0
@@ -986,8 +1009,15 @@ class Mavic2ProROS2Controller(Robot):
                     self.camera_manual_roll -= CONFIG['CAMERA_MANUAL_INCREMENT']
                     print(f"Camera roll: {self.camera_manual_roll:.3f} rad")
 
+                elif key == ord('j') or key == ord('J'):
+                    self.use_joystick = True
+                    print("use joystick true")
+                elif key == ord('k') or key == ord('K'):
+                    self.use_joystick = False
+                    print("use joystick false")
+
                 # Debug: print unknown keys
-                elif key not in [Keyboard.UP, Keyboard.DOWN, Keyboard.LEFT, Keyboard.RIGHT]:
+                elif key not in [Keyboard.UP, Keyboard.DOWN, Keyboard.LEFT, Keyboard.RIGHT, ord('j'), ord('k')]:
                     if key > 0 and key < 500:  # Reasonable key range
                         print(f"DEBUG: Unknown key pressed: {key}")
 
@@ -1005,14 +1035,35 @@ class Mavic2ProROS2Controller(Robot):
 
                 key = self.keyboard.getKey()
 
-            # Yaw from joystick
-            self.poll_joystick_yaw()
-            if self.joystick_yaw == 0:
-                self.target_yaw_disturbance = 0
-            elif self.joystick_yaw < 0:
-                self.target_yaw_disturbance = CONFIG['YAW_DISTURBANCE_LEFT'] * abs(self.joystick_yaw)
-            elif self.joystick_yaw > 0:
-                self.target_yaw_disturbance = CONFIG['YAW_DISTURBANCE_RIGHT'] * self.joystick_yaw
+            # Yaw from joystick 
+            if self.use_joystick:
+                self.poll_joystick_yaw()
+                self.poll_joystick_pitch_roll()
+
+                if self.joystick_yaw == 0:
+                    if self.target_yaw_disturbance != 0:
+                        self.target_yaw_disturbance = 0
+                elif self.joystick_yaw < 0:
+                    self.target_yaw_disturbance = CONFIG['YAW_DISTURBANCE_LEFT'] * abs(self.joystick_yaw)
+                elif self.joystick_yaw > 0:
+                    self.target_yaw_disturbance = CONFIG['YAW_DISTURBANCE_RIGHT'] * self.joystick_yaw
+
+                if self.joystick_pitch == 0:
+                    if self.target_pitch_disturbance != 0:
+                        self.target_pitch_disturbance = 0
+                elif self.joystick_pitch < 0:
+                    self.target_pitch_disturbance = CONFIG['PITCH_DISTURBANCE_BACKWARD'] * abs(self.joystick_pitch)
+                elif self.joystick_pitch > 0:
+                    self.target_pitch_disturbance = CONFIG['PITCH_DISTURBANCE_FORWARD'] * self.joystick_pitch
+
+                if self.joystick_roll == 0:
+                    if self.target_roll_disturbance != 0:
+                        self.target_roll_disturbance = 0
+                elif self.joystick_roll < 0:
+                    self.target_roll_disturbance = CONFIG['ROLL_DISTURBANCE_LEFT'] * abs(self.joystick_roll)
+                elif self.joystick_roll > 0:
+                    self.target_roll_disturbance = CONFIG['ROLL_DISTURBANCE_RIGHT'] * self.joystick_roll
+                
 
             # Override with autonomous navigation if active
             if self.autonomous_mode and self.object_absolute_position and self.global_intent.lower() == 'go':
