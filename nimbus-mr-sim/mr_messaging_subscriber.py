@@ -20,6 +20,7 @@ class DroneMessageServer:
     def __init__(self):
         self.conn = None
         self.running = True
+        self.session = requests.Session()
         self.lock = threading.Lock()
         self.last_timestamp = None
 
@@ -54,7 +55,7 @@ class DroneMessageServer:
     def poll_hud_message(self):
         """Poll endpoint for new messages"""
         try:
-            response = requests.get(HUD_ENDPOINT, timeout = 2)
+            response = self.session.get(HUD_ENDPOINT, timeout = 2)
             if response.status_code == 200:
                 return response.json()
         except requests.RequestException as e:

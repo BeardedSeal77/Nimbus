@@ -15,6 +15,7 @@ class TelemetryForwarder:
         self.last_detection_count = None
         self.current_target = None
         self.waiting_first_detection = False  # True when target switched
+        self.session = requests.Session()
 
     def start_tcp_server(self):
         self.sent_objects.clear()
@@ -30,7 +31,7 @@ class TelemetryForwarder:
 
     def fetch_telemetry(self):
         try:
-            response = requests.get(DRONE_TELEMETRY_URL, timeout=2)
+            response = self.session.get(DRONE_TELEMETRY_URL, timeout=2)
             if response.status_code == 200:
                 return response.json()
             else:
@@ -109,7 +110,7 @@ class TelemetryForwarder:
                     print("Reconnecting to Unity...")
                     self.start_tcp_server()
                 self.forward_new_objects()
-                time.sleep(0.2)
+                time.sleep(0.5)
         except KeyboardInterrupt:
             print("Shutting down server...")
             self.running = False

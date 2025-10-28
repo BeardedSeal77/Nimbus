@@ -12,6 +12,7 @@ class DroneTelemetryServer:
     def __init__(self):
         self.conn = None
         self.running = True
+        self.session = requests.Session()
         self.lock = threading.Lock()
 
     def start_tcp_server(self):
@@ -48,7 +49,8 @@ class DroneTelemetryServer:
                 if not self.conn:
                     self.start_tcp_server()
 
-                resp = requests.get(DRONE_TELEMETRY_URL)
+                time.sleep(0.5)
+                resp = self.session.get(DRONE_TELEMETRY_URL)
                 if resp.status_code == 200:
                     data = resp.json()
 
