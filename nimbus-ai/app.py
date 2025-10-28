@@ -157,6 +157,47 @@ def run_ai_worker(shared_state):
                     result = audio_service_instance.stop_recording()
                     shared_state['audio_result'] = result
 
+                # Handle manual transcript trigger
+                if shared_state.get('manual_transcript_trigger', False):
+                    transcript = shared_state.get('manual_transcript', '')
+                    if transcript:
+                        try:
+                            from classes.intent_object_node import intent_object_node
+                            result = intent_object_node(transcript)
+
+                            # Update global state (same as voice command)
+                            if result['intent']:
+                                worker_config['GLOBAL_INTENT'] = result['intent']
+                                shared_state['global_intent'] = result['intent']
+                                if result['intent'].lower() == 'go':
+                                    shared_state['calculate_position_trigger'] = True
+                                    logger.info("Position calculation trigger SET (intent='go')")
+                                elif result['intent'].lower() == 'home':
+                                    shared_state['object_absolute_position'] = {'x': 0.0, 'y': 0.0, 'z': 0.0}
+                                    shared_state['global_object'] = ''
+                                    shared_state['target_object'] = ''
+                                    worker_config['GLOBAL_OBJECT'] = ''
+                                    logger.info("Object absolute position SET to HOME (0,0,0), target_object cleared")
+
+                            if result['object']:
+                                worker_config['GLOBAL_OBJECT'] = result['object']
+                                shared_state['global_object'] = result['object']
+                                shared_state['target_object'] = result['object']
+
+                            shared_state['manual_transcript_result'] = {
+                                'success': True,
+                                'transcript': transcript,
+                                'intent': result['intent'],
+                                'object': result['object']
+                            }
+                            logger.info(f"Manual transcript processed: intent='{result['intent']}', object='{result['object']}'")
+                        except Exception as e:
+                            logger.error(f"Manual transcript processing error: {e}")
+                            shared_state['manual_transcript_result'] = {
+                                'success': False,
+                                'error': str(e)
+                            }
+
                 # Calculate FPS
                 frame_count += 1
                 if frame_count % 30 == 0:

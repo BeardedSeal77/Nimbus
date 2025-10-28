@@ -77,33 +77,34 @@ class ObjectDetector:
         print("Ready for real-time object detection")
 
 
+
+# -------------------------------------------------------------------------------------
+# Core detection method - finds target object in image and returns coordinates
+
+# This is the main entry point used by the Central Hub to process frames.
+
+# Parameters:
+#     target_object (str): Object to find (e.g., "chair", "person", "cup")
+#                        - User provides this via voice command
+#                        - Comes from LLM classification in Audio Pipeline
+
+#     image_source: Video frame to analyze
+#                  - Can be: file path, URL, PIL image, or numpy array
+#                  - In production: numpy array from video stream
+
+# Returns:
+#     dict: Bounding box coordinates
+#           Format: {'x': x, 'y': y, 'width': w, 'height': h}
+#           Empty dict {} if object not found
+
+# Integration Point:
+#     These coordinates are sent to:
+#     1. Central Hub -> Global Variables Storage
+#     2. Depth Detection Node (for distance calculation)
+#     3. MR Branch (for Unity overlay visualization)
+#     4. Robotics Branch (for navigation toward object)
+
     def detect(self, target_object: str, image_source) -> dict:
-        """
-        Core detection method - finds target object in image and returns coordinates
-
-        This is the main entry point used by the Central Hub to process frames.
-
-        Parameters:
-            target_object (str): Object to find (e.g., "chair", "person", "cup")
-                               - User provides this via voice command
-                               - Comes from LLM classification in Audio Pipeline
-
-            image_source: Video frame to analyze
-                         - Can be: file path, URL, PIL image, or numpy array
-                         - In production: numpy array from video stream
-
-        Returns:
-            dict: Bounding box coordinates
-                  Format: {'x': x, 'y': y, 'width': w, 'height': h}
-                  Empty dict {} if object not found
-
-        Integration Point:
-            These coordinates are sent to:
-            1. Central Hub -> Global Variables Storage
-            2. Depth Detection Node (for distance calculation)
-            3. MR Branch (for Unity overlay visualization)
-            4. Robotics Branch (for navigation toward object)
-        """
         try:
             # Run YOLO inference on the frame
             # Configuration:

@@ -332,7 +332,7 @@ async function stopAudioRecording() {
             if (result.success) {
                 statusDiv.innerHTML = `
                     <div style="color: green; font-weight: bold;">✅ Audio Processed Successfully</div>
-                    <div style="margin-top: 5px;">
+                    <div style="margin-top: 5px; color: black;">
                         <strong>Transcript:</strong> "${result.transcript}"<br>
                         <strong>Intent:</strong> ${result.intent || 'none'}<br>
                         <strong>Object:</strong> ${result.object || 'none'}
@@ -357,5 +357,51 @@ async function stopAudioRecording() {
     } finally {
         recordBtn.disabled = false;
         stopBtn.disabled = true;
+    }
+}
+
+async function processManualTranscript() {
+    const transcriptInput = document.getElementById('manual-transcript');
+    const statusDiv = document.getElementById('manual-status');
+    const transcript = transcriptInput.value.trim();
+
+    if (!transcript) {
+        showMessage('Please enter a command', 'error');
+        return;
+    }
+
+    statusDiv.innerHTML = '<span style="color: orange;">⏳ Processing command...</span>';
+
+    try {
+        const response = await fetch('/api/audio/process_text', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ transcript: transcript })
+        });
+
+        const data = await response.json();
+
+        if (data.status === 'ok' && data.result.success) {
+            const result = data.result;
+            statusDiv.innerHTML = `
+                <div style="color: green; font-weight: bold;">✅ Command Processed</div>
+                <div style="margin-top: 5px; color: black;">
+                    <strong>Transcript:</strong> "${result.transcript}"<br>
+                    <strong>Intent:</strong> ${result.intent || 'none'}<br>
+                    <strong>Object:</strong> ${result.object || 'none'}
+                </div>
+            `;
+            statusDiv.style.background = '#d4edda';
+            showMessage(`Command processed: ${result.intent} ${result.object}`, 'success');
+
+            transcriptInput.value = '';
+            setTimeout(refreshStatus, 500);
+        } else {
+            statusDiv.innerHTML = `<span style="color: red;">Error: ${data.result?.error || 'Processing failed'}</span>`;
+            statusDiv.style.background = '#f8d7da';
+        }
+    } catch (error) {
+        statusDiv.innerHTML = `<span style="color: red;">Error: ${error.message}</span>`;
+        statusDiv.style.background = '#f8d7da';
     }
 }

@@ -31,37 +31,19 @@
                     <h2>🤖 AI Control Panel</h2>
 
                     <div class="variable-group">
-                        <h3>🔍 Object Detection</h3>
+                        <h3>✍️ Manual Command Input</h3>
                         <div class="input-group">
-                            <label for="target-object">Target Object to Detect: <span id="current-target-object" style="color: #4CAF50;">car</span></label>
-                            <input type="text" id="target-object" placeholder="Enter new object name (e.g., person, car, bottle)">
-                            <small>Type any object YOLO can detect (80+ classes)</small>
+                            <label for="manual-transcript">Type Command:</label>
+                            <input type="text" id="manual-transcript" placeholder="e.g., 'go to the car' or 'go home'">
+                            <small>Enter text command directly (bypasses voice recording)</small>
                         </div>
                         <div class="button-group">
-                            <button class="btn-primary" onclick="setTargetObject()">
-                                🎯 Set Target Object
-                            </button>
-                            <button class="btn-warning" onclick="resetSystem()">
-                                🔄 Reset System
+                            <button class="btn-primary" onclick="processManualTranscript()">
+                                📝 Process Command
                             </button>
                         </div>
-                    </div>
-
-                    <div class="variable-group">
-                        <h3>📏 Depth Detection Control</h3>
-                        <div class="button-group">
-                            <button class="btn-primary" onclick="triggerDepthDetection()">
-                                🎯 Trigger Depth Detection
-                            </button>
-                            <button class="btn-danger" onclick="stopDepthDetection()">
-                                🛑 Stop Depth Detection
-                            </button>
-                            <button class="btn-info" onclick="refreshStatus()">
-                                🔄 Refresh Status
-                            </button>
-                        </div>
-                        <div id="depth-status" class="status-display">
-                            Click "Refresh Status" to load current system state...
+                        <div id="manual-status" class="status-display">
+                            Enter a command above to process...
                         </div>
                     </div>
 

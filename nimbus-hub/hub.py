@@ -475,6 +475,40 @@ def stop_audio_recording():
         logger.error(f"Stop audio error: {e}")
         return {'status': 'error', 'message': str(e)}, 500
 
+@app.route('/api/audio/process_text', methods=['POST'])
+def process_text_command():
+    """Process text command directly through intent extraction pipeline"""
+    try:
+        data = request.get_json()
+        transcript = data.get('transcript', '').strip()
+
+        if not transcript:
+            return {'status': 'error', 'message': 'No transcript provided'}, 400
+
+        if not ai_process or not ai_process.is_alive():
+            return {'status': 'error', 'message': 'AI worker not running'}, 500
+
+        shared_state['manual_transcript'] = transcript
+        shared_state['manual_transcript_trigger'] = True
+
+        timeout = 5.0
+        start_time = time.time()
+
+        while time.time() - start_time < timeout:
+            if 'manual_transcript_result' in shared_state:
+                result = dict(shared_state['manual_transcript_result'])
+                del shared_state['manual_transcript_result']
+                del shared_state['manual_transcript']
+                shared_state['manual_transcript_trigger'] = False
+                logger.info(f"Manual transcript processed: {result}")
+                return {'status': 'ok', 'result': result}, 200
+            time.sleep(0.1)
+
+        return {'status': 'error', 'message': 'Processing timeout'}, 500
+    except Exception as e:
+        logger.error(f"Process text error: {e}")
+        return {'status': 'error', 'message': str(e)}, 500
+
 @app.route('/api/ai_status', methods=['GET'])
 def get_ai_status():
     """Get AI worker status"""
