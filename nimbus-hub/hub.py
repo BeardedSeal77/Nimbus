@@ -780,6 +780,34 @@ def get_headset_yaw():
     except Exception as e:
         logger.error(f"Get headset yaw error: {e}")
         return {'status': 'error', 'message': str(e)}, 500
+    
+# ============================================================================
+# MR JOYSTICK ENDPOINTS
+# ============================================================================
+
+@app.route('/api/mr/rotation', methods=['POST'])
+def update_right_controller_yaw():
+    """Receive right controller yaw from Unity"""
+    try:
+        data = request.get_json()
+        yaw = float(data.get('yaw', 0.0))
+
+        # Update shared state
+        shared_state['right_controller_yaw'] = yaw
+
+        return jsonify({'status': 'ok', 'yaw': yaw}), 200
+
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/api/mr/rotation', methods=['GET'])
+def get_right_controller_yaw():
+    """Return last known right controller yaw"""
+    if 'right_controller_yaw' not in shared_state:
+        return jsonify({'status': 'error', 'message': 'Yaw not available'}), 404
+
+    yaw = shared_state['right_controller_yaw']
+    return jsonify({'status': 'ok', 'yaw': yaw}), 200
 
 
 # ============================================================================

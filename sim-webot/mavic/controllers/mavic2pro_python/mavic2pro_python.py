@@ -528,6 +528,8 @@ class Mavic2ProROS2Controller(Robot):
         self.navigation_target = None  # Legacy delta-based (deprecated)
         self.object_absolute_position = None  # World position of target object
 
+        self.joystick_yaw = 0
+
         self.global_intent = None
         self.global_object = None
         self.last_hud_object = None
@@ -766,6 +768,21 @@ class Mavic2ProROS2Controller(Robot):
         except:
             pass
 
+    def poll_joystick_yaw(self):
+        """Poll hub for joystick yaw"""
+        try:
+            response = requests.get(
+                f"{CONFIG['HUB_URL']}/api/mr/rotation",
+                timeout=0.01
+            )
+            if response.status_code == 200:
+                data = response.json()
+                self.joystick_yaw = data.get('yaw')
+            else:
+                self.joystick_yaw = 0
+        except:
+            pass
+
     def get_navigation_disturbances(self):
         """Calculate yaw/pitch/roll from object absolute position using simultaneous PIDs"""
         if not self.autonomous_mode or not self.object_absolute_position:
@@ -984,6 +1001,15 @@ class Mavic2ProROS2Controller(Robot):
                     print(f"[AUTONOMOUS MODE: {'ENABLED' if self.autonomous_mode else 'DISABLED'}]")
 
                 key = self.keyboard.getKey()
+
+            # Yaw from joystick
+            self.poll_joystick_yaw()
+            if self.joystick_yaw == 0:
+                self.target_yaw_disturbance = 0
+            elif self.joystick_yaw < 0:
+                self.target_yaw_disturbance = CONFIG['YAW_DISTURBANCE_LEFT'] * abs(self.joystick_yaw)
+            elif self.joystick_yaw > 0:
+                self.target_yaw_disturbance = CONFIG['YAW_DISTURBANCE_RIGHT'] * self.joystick_yaw
 
             # Override with autonomous navigation if active
             if self.autonomous_mode and self.object_absolute_position and self.global_intent.lower() == 'go':
