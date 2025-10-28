@@ -809,6 +809,37 @@ def get_right_controller_yaw():
     yaw = shared_state['right_controller_yaw']
     return jsonify({'status': 'ok', 'yaw': yaw}), 200
 
+@app.route('/api/mr/joystick', methods=['POST'])
+def update_joystick_input():
+    """Receive joystick pitch and roll from Unity"""
+    try:
+        data = request.get_json()
+
+        pitch = float(data.get('pitch', 0.0))
+        roll = float(data.get('roll', 0.0))
+
+        # Update shared state
+        shared_state['joystick_pitch'] = pitch
+        shared_state['joystick_roll'] = roll
+
+        return jsonify({'status': 'ok', 'pitch': pitch, 'roll': roll}), 200
+
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/api/mr/joystick', methods=['GET'])
+def get_joystick_input():
+    """Return last known joystick pitch and roll"""
+    if 'joystick_pitch' not in shared_state or 'joystick_roll' not in shared_state:
+        return jsonify({'status': 'error', 'message': 'Joystick data not available'}), 404
+
+    pitch = shared_state['joystick_pitch']
+    roll = shared_state['joystick_roll']
+
+    return jsonify({'status': 'ok', 'pitch': pitch, 'roll': roll}), 200
+
+
 
 # ============================================================================
 # HUD MESSAGE ENDPOINTS
