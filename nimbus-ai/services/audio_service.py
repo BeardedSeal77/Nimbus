@@ -129,14 +129,21 @@ class AudioService:
 
             if self.app:
                 with self.app.config['STATE_LOCK']:
-                    # if result['intent']:
-                    self.app.config['GLOBAL_INTENT'] = result['intent']
-                    if hasattr(self.app, 'shared_state'):
-                        self.app.shared_state['global_intent'] = result['intent']
-                        # Trigger object position calculation if intent is 'go'
-                        if result['intent'].lower() == 'go':
-                            self.app.shared_state['calculate_position_trigger'] = True
-                            logger.info("Position calculation trigger SET (intent='go')")
+                    if result['intent']:
+                        self.app.config['GLOBAL_INTENT'] = result['intent']
+                        if hasattr(self.app, 'shared_state'):
+                            self.app.shared_state['global_intent'] = result['intent']
+                            # Trigger object position calculation if intent is 'go'
+                            if result['intent'].lower() == 'go':
+                                self.app.shared_state['calculate_position_trigger'] = True
+                                logger.info("Position calculation trigger SET (intent='go')")
+                            # Set home position directly if intent is 'home'
+                            elif result['intent'].lower() == 'home':
+                                self.app.shared_state['object_absolute_position'] = {'x': 0.0, 'y': 0.0, 'z': 0.0}
+                                self.app.shared_state['global_object'] = ''
+                                self.app.shared_state['target_object'] = ''
+                                self.app.config['GLOBAL_OBJECT'] = ''
+                                logger.info("Object absolute position SET to HOME (0,0,0), target_object cleared")
 
                     # if result['object']:
                     self.app.config['GLOBAL_OBJECT'] = result['object']

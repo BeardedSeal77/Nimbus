@@ -997,8 +997,11 @@ class Mavic2ProROS2Controller(Robot):
                 elif key == ord('L'):
                     self.land()
                 elif key == ord('A'):
-                    self.autonomous_mode = not self.autonomous_mode
-                    print(f"[AUTONOMOUS MODE: {'ENABLED' if self.autonomous_mode else 'DISABLED'}]")
+                    self.autonomous_mode = True
+                    print(f"[AUTONOMOUS MODE: ENABLED]")
+                elif key == ord('X'):
+                    self.autonomous_mode = False
+                    print(f"[AUTONOMOUS MODE: DISABLED]")
 
                 key = self.keyboard.getKey()
 

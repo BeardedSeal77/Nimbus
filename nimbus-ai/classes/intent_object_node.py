@@ -170,28 +170,30 @@ def _map_to_final_intent(raw_intent: str) -> str:
 def _fallback_parse(transcript: str) -> Dict[str, str]:
     """
     Simple fallback parser when Ollama is unavailable.
-    
+
     Args:
         transcript (str): The voice command transcript
-        
+
     Returns:
         Dict[str, str]: Dictionary with 'intent' and 'object' keys
     """
     transcript_lower = transcript.lower().strip()
-    
+
     intent = ""
     obj = ""
-    
-    # Check for intent mappings
-    for final_intent, variations in INTENT_MAPPINGS.items():
+
+    # Check for intent mappings in priority order (more specific first)
+    priority_order = ["home", "land", "stop", "cancel", "go"]
+    for final_intent in priority_order:
+        variations = INTENT_MAPPINGS[final_intent]
         if any(variation in transcript_lower for variation in variations):
             intent = final_intent
             break
-    
+
     # Check for objects
     for common_object in COMMON_OBJECTS:
         if common_object in transcript_lower:
             obj = common_object
             break
-    
+
     return {"intent": intent, "object": obj}
