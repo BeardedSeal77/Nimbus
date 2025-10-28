@@ -41,6 +41,23 @@ except ImportError:
 
 # clamp() function moved to PID.py
 
+# ============================================================================
+# HTTP SESSION WITH CONNECTION POOLING
+# ============================================================================
+
+# Create persistent session to reuse TCP connections and avoid socket exhaustion
+# This session is shared across all HTTP requests to reduce connection overhead
+_http_session = requests.Session()
+_http_adapter = requests.adapters.HTTPAdapter(
+    pool_connections=10,  # Number of connection pools to cache
+    pool_maxsize=20,      # Maximum connections to save in the pool
+    max_retries=0         # No retries for speed (timeouts are already low)
+)
+_http_session.mount('http://', _http_adapter)
+_http_session.mount('https://', _http_adapter)
+
+print("[HTTP] Connection pooling initialized (pool_size=20, connections=10)")
+
 
 # ============================================================================
 # GLOBAL CONFIGURATION
@@ -288,9 +305,9 @@ class VideoPublisher:
                 img.save(buffer, format='JPEG', quality=85)
                 jpeg_bytes = buffer.getvalue()
 
-                # Publish to hub
+                # Publish to hub using persistent session
                 try:
-                    requests.post(
+                    _http_session.post(
                         f"{self.hub_url}/drone/video",
                         json={
                             'data': base64.b64encode(jpeg_bytes).decode('ascii'),
@@ -732,8 +749,8 @@ class Mavic2ProROS2Controller(Robot):
                 }
             }
 
-            # Non-blocking POST to hub
-            requests.post(
+            # Non-blocking POST to hub using persistent session
+            _http_session.post(
                 f"{CONFIG['HUB_URL']}/drone/state",
                 json=state_dict,
                 timeout=0.005  # 5ms timeout
@@ -745,8 +762,7 @@ class Mavic2ProROS2Controller(Robot):
 
     def update_hud_message(self, message):
         try:
-            import requests
-            requests.post(
+            _http_session.post(
                 "http://127.0.0.1:5000/hud/message",
                 json={"message": message},
                 timeout=1
@@ -758,7 +774,7 @@ class Mavic2ProROS2Controller(Robot):
     def poll_autonomous_mode_trigger(self):
         """Check if autonomous mode should be enabled via voice command"""
         try:
-            response = requests.get(
+            response = _http_session.get(
                 f"{CONFIG['HUB_URL']}/api/autonomous_mode_trigger",
                 timeout=0.01
             )
@@ -770,14 +786,14 @@ class Mavic2ProROS2Controller(Robot):
                     self.target_locked = False
                     print("[AUTONOMOUS MODE: ENABLED via voice command - SEARCHING]")
                     # Clear the trigger
-                    requests.post(f"{CONFIG['HUB_URL']}/api/clear_autonomous_trigger", timeout=0.01)
+                    _http_session.post(f"{CONFIG['HUB_URL']}/api/clear_autonomous_trigger", timeout=0.01)
         except:
             pass
 
     def poll_navigation_target(self):
         """Poll hub for object absolute position from AI"""
         try:
-            response = requests.get(
+            response = _http_session.get(
                 f"{CONFIG['HUB_URL']}/navigation/object_position",
                 timeout=0.01
             )
@@ -813,7 +829,7 @@ class Mavic2ProROS2Controller(Robot):
     def poll_joystick_yaw(self):
         """Poll hub for joystick yaw"""
         try:
-            response = requests.get(
+            response = _http_session.get(
                 f"{CONFIG['HUB_URL']}/api/mr/rotation",
                 timeout=0.01
             )
@@ -828,7 +844,7 @@ class Mavic2ProROS2Controller(Robot):
     def poll_joystick_pitch_roll(self):
         """Poll hub for joystick pitch and roll"""
         try:
-            response = requests.get(
+            response = _http_session.get(
                 f"{CONFIG['HUB_URL']}/api/mr/joystick",
                 timeout=0.01
             )
