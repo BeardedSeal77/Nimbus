@@ -135,8 +135,11 @@ class AudioService:
                             self.app.shared_state['global_intent'] = result['intent']
                             # Trigger object position calculation if intent is 'go'
                             if result['intent'].lower() == 'go':
+                                # Clear old position before calculating new one
+                                self.app.shared_state['object_absolute_position'] = None
                                 self.app.shared_state['calculate_position_trigger'] = True
-                                logger.info("Position calculation trigger SET (intent='go')")
+                                self.app.shared_state['autonomous_mode_trigger'] = True
+                                logger.info("Position cleared + calculation trigger SET + autonomous trigger SET (intent='go')")
                             # Set home position directly if intent is 'home'
                             elif result['intent'].lower() == 'home':
                                 self.app.shared_state['object_absolute_position'] = {'x': 0.0, 'y': 0.0, 'z': 0.0}

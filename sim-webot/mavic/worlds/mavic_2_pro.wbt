@@ -11,10 +11,10 @@ EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/project
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/vehicles/protos/tesla/TeslaModel3Simple.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/trees/protos/Pine.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/robots/dji/mavic/protos/Mavic2Pro.proto"
-EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/street_furniture/protos/Bench.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/cabinet/protos/Cabinet.proto"
-EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/garden/protos/Slide.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/humans/pedestrian/protos/Pedestrian.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/factory/forklift/protos/Forklift.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/chairs/protos/OfficeChair.proto"
 
 WorldInfo {
   info [
@@ -30,7 +30,7 @@ WorldInfo {
 }
 Viewpoint {
   orientation -0.29578734949322777 -0.08424166622828634 0.9515320202446438 3.551712352654801
-  position 38.72824783416351 22.593815137486196 39.14725876882697
+  position 11.616296632134816 10.59538116176946 18.41023846807341
   near 0.2
   follow "Mavic 2 PRO"
   followSmoothness 0.2
@@ -45,9 +45,6 @@ Floor {
   tileSize 6 6
   appearance SandyGround {
   }
-}
-Slide {
-  translation -11.29 5.63 0
 }
 Cabinet {
   translation -31.795 13.8306 0
@@ -69,6 +66,9 @@ Road {
   appearance Pavement {
     type "black stone"
   }
+}
+OfficeChair {
+  translation -25.44 -2.95 0
 }
 SquareManhole {
   translation 0 0 -0.03
@@ -116,15 +116,9 @@ Mavic2Pro {
   hidden linearVelocity_0 -6.099564075992189e-07 8.955203184265728e-09 1.6902021798650265e-05
   hidden angularVelocity_0 -7.220721618373193e-07 -3.5632118047371324e-05 -1.2385714534493087e-07
   hidden position_5_0 -3.1300434975588717e-06
-  hidden linearVelocity_5 -1.6815767386663856e-06 4.6165128039309434e-08 1.2444799967737492e-05
-  hidden angularVelocity_5 -7.228398107380025e-07 -3.5632117867316215e-05 -1.3484767528450037e-07
   hidden rotation_6 0 -1 0 3.1300952298155532e-06
   hidden position_6_0 -8.195935841115443e-08
-  hidden linearVelocity_6 -1.4982215373253178e-06 4.237160176167401e-08 1.2491547060049863e-05
-  hidden angularVelocity_6 -7.228622183275616e-07 -3.1312363582760715e-05 -1.3485516017592522e-07
   hidden rotation_7 -1 0 0 8.429369702178807e-08
-  hidden linearVelocity_7 -1.2299362944728267e-06 3.63514043114004e-08 1.2451096272807658e-05
-  hidden angularVelocity_7 -7.237811371512588e-07 -3.131236357891795e-05 -1.347909786469092e-07
   translation 0.0053065925569023426 -2.5183115433564083e-07 0.08571456075496248
   rotation 0.03485648888538157 9.478223440559151e-07 0.9993923279581873 -3.141587530191457
   controller "mavic2pro_python"
@@ -136,11 +130,10 @@ Mavic2Pro {
     }
   ]
 }
-Bench {
-  translation -23.255 -2.62401 0
-  rotation 0 0 1 1.0472
-}
 Pedestrian {
   translation -8.89 -6.67 1.27
   rotation 0 0 1 1.5708
+}
+Forklift {
+  translation -17.03 -8.12 0.81
 }

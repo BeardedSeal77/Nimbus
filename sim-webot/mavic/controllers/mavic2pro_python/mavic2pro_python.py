@@ -111,14 +111,9 @@ WORLD_OBJECTS = {
         'position': {'x': -41.5139, 'y': 4.34169, 'z': 0.31},
         'rotation': {'x': 0, 'y': 0, 'z': 1, 'angle': -0.2618053071795865}
     },
-    'bench': {
-        'type': 'Bench',
-        'position': {'x': -23.255, 'y': -2.62401, 'z': 0},
-        'rotation': {'x': 0, 'y': 0, 'z': 1, 'angle': 1.0472}
-    },
-    'slide': {
-        'type': 'Slide',
-        'position': {'x': -11.29, 'y': 5.63, 'z': 0},
+    'chair': {
+        'type': 'OfficeChair',
+        'position': {'x': -25.44, 'y': -2.95, 'z': 0},
         'rotation': {'x': 0, 'y': 0, 'z': 1, 'angle': 0}
     },
     'human': {
@@ -139,6 +134,11 @@ WORLD_OBJECTS = {
     'manhole': {
         'type': 'SquareManhole',
         'position': {'x': 0, 'y': 0, 'z': -0.03},
+        'rotation': {'x': 0, 'y': 0, 'z': 1, 'angle': 0}
+    },
+    'forklift': {
+        'type': 'Forklift',
+        'position': {'x': -17.03, 'y': -8.12, 'z': 0.81},
         'rotation': {'x': 0, 'y': 0, 'z': 1, 'angle': 0}
     }
 }
@@ -527,6 +527,8 @@ class Mavic2ProROS2Controller(Robot):
         self.autonomous_mode = False
         self.navigation_target = None  # Legacy delta-based (deprecated)
         self.object_absolute_position = None  # World position of target object
+        self.navigation_state = 'IDLE'  # States: IDLE, SEARCHING, FACING, NAVIGATING
+        self.target_locked = False  # True once coordinates received
 
         self.joystick_yaw = 0
         self.joystick_pitch = 0
@@ -753,6 +755,25 @@ class Mavic2ProROS2Controller(Robot):
         except Exception as e:
             print(f"[HUD] Failed to send HUD message: {e}")
 
+    def poll_autonomous_mode_trigger(self):
+        """Check if autonomous mode should be enabled via voice command"""
+        try:
+            response = requests.get(
+                f"{CONFIG['HUB_URL']}/api/autonomous_mode_trigger",
+                timeout=0.01
+            )
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('trigger', False):
+                    self.autonomous_mode = True
+                    self.navigation_state = 'SEARCHING'
+                    self.target_locked = False
+                    print("[AUTONOMOUS MODE: ENABLED via voice command - SEARCHING]")
+                    # Clear the trigger
+                    requests.post(f"{CONFIG['HUB_URL']}/api/clear_autonomous_trigger", timeout=0.01)
+        except:
+            pass
+
     def poll_navigation_target(self):
         """Poll hub for object absolute position from AI"""
         try:
@@ -763,11 +784,29 @@ class Mavic2ProROS2Controller(Robot):
             if response.status_code == 200:
                 data = response.json()
                 if data.get('has_position') and data.get('object_position'):
+                    new_object = data['object_name']
+
+                    # If object changed, clear old position and unlock target
+                    if self.global_object and new_object != self.global_object:
+                        print(f"[AUTO] Object changed from '{self.global_object}' to '{new_object}' - resetting")
+                        self.object_absolute_position = None
+                        self.target_locked = False
+                        self.navigation_state = 'SEARCHING'
+
+                    # Track when coordinates are first received
+                    if not self.target_locked:
+                        self.target_locked = True
+                        self.navigation_state = 'FACING'
+                        print(f"[AUTO] Target locked at position: {data['object_position']}")
+
                     self.object_absolute_position = data['object_position']
                     self.global_intent = data['intent']
-                    self.global_object = data['object_name']
+                    self.global_object = new_object
                 else:
-                    self.object_absolute_position = None
+                    # Only clear position if we haven't locked target yet
+                    if not self.target_locked:
+                        self.object_absolute_position = None
+                    # If target_locked = True, keep the coordinates even if detection fails
         except:
             pass
 
@@ -805,12 +844,34 @@ class Mavic2ProROS2Controller(Robot):
             pass
 
     def get_navigation_disturbances(self):
-        """Calculate yaw/pitch/roll from object absolute position using simultaneous PIDs"""
-        if not self.autonomous_mode or not self.object_absolute_position:
+        """
+        State machine for autonomous navigation:
+        - SEARCHING: Rotate slowly until object detected and coordinates received
+        - FACING: Yaw to face object within 3 degrees
+        - NAVIGATING: Normal PID navigation to target
+        """
+        if not self.autonomous_mode:
             return 0.0, 0.0, 0.0
 
         import math
 
+        # STATE 1: SEARCHING - No coordinates yet, slowly rotate to find object
+        if self.navigation_state == 'SEARCHING':
+            if not self.object_absolute_position:
+                # Slowly yaw left until object is detected and coordinates calculated
+                print("[AUTO] SEARCHING for object...")
+                return -0.3, 0.0, 0.0
+            else:
+                # Coordinates received, transition to FACING
+                self.navigation_state = 'FACING'
+                self.target_locked = True
+                print("[AUTO] Target found! Transitioning to FACING mode")
+
+        # From here on, we ALWAYS have object_absolute_position (locked target)
+        if not self.object_absolute_position:
+            return 0.0, 0.0, 0.0
+
+        # Calculate relative position to object
         obj_x = self.object_absolute_position['x']
         obj_y = self.object_absolute_position['y']
 
@@ -821,9 +882,15 @@ class Mavic2ProROS2Controller(Robot):
         world_dx = obj_x - drone_x
         world_dy = obj_y - drone_y
 
+        # Transform to drone frame
         delta_x = world_dx * math.cos(drone_yaw) + world_dy * math.sin(drone_yaw)
         delta_y = -world_dx * math.sin(drone_yaw) + world_dy * math.cos(drone_yaw)
 
+        # Calculate heading error
+        heading_error_rad = math.atan2(delta_y, delta_x)
+        heading_error_deg = math.degrees(heading_error_rad)
+
+        # Get controller inputs
         world_vx = self.state.velocity['x']
         world_vy = self.state.velocity['y']
         velocity_x = world_vx * math.cos(drone_yaw) + world_vy * math.sin(drone_yaw)
@@ -837,24 +904,41 @@ class Mavic2ProROS2Controller(Robot):
         yaw_velocity = self.state.angular_velocity['yaw']
         dt = self.time_step / 1000.0
 
-        distance = math.sqrt(delta_x**2 + delta_y**2)
-        velocity_magnitude = math.sqrt(velocity_x**2 + velocity_y**2)
-        heading_error_deg = math.degrees(math.atan2(delta_y, delta_x))
+        # STATE 2: FACING - Object in view but not facing, yaw only (no movement)
+        if self.navigation_state == 'FACING':
+            if abs(heading_error_deg) > 3.0:
+                # Still turning to face object
+                yaw_disturbance = self.yaw_controller.update(delta_x, delta_y, yaw_velocity, dt)
+                print(f"[AUTO] FACING object... heading error: {heading_error_deg:+.1f} deg")
+                return yaw_disturbance, 0.0, 0.0
+            else:
+                # Now facing object, transition to NAVIGATING
+                self.navigation_state = 'NAVIGATING'
+                print("[AUTO] Object facing! Transitioning to NAVIGATING mode")
 
-        yaw_disturbance = self.yaw_controller.update(delta_x, delta_y, yaw_velocity, dt)
-        pitch_disturbance, roll_disturbance, at_target = self.movement_controller.update(
-            delta_x, delta_y, velocity_x, velocity_y, accel_magnitude, dt
-        )
+        # STATE 3: NAVIGATING - Normal PID navigation (existing behavior)
+        if self.navigation_state == 'NAVIGATING':
+            distance = math.sqrt(delta_x**2 + delta_y**2)
+            velocity_magnitude = math.sqrt(velocity_x**2 + velocity_y**2)
 
-        if at_target:
-            print(f"[AUTO] Arrived at target!")
-            self.autonomous_mode = False
-            # Send message to Flask HUD endpoint
-            self.update_hud_message("Arrived at target!")        
-        else:
-            print(f"[AUTO] Dist: {distance:.2f}m, Heading: {heading_error_deg:+.1f}deg, Vel: {velocity_magnitude:.2f}m/s")
+            yaw_disturbance = self.yaw_controller.update(delta_x, delta_y, yaw_velocity, dt)
+            pitch_disturbance, roll_disturbance, at_target = self.movement_controller.update(
+                delta_x, delta_y, velocity_x, velocity_y, accel_magnitude, dt
+            )
 
-        return yaw_disturbance, pitch_disturbance, roll_disturbance
+            if at_target:
+                print(f"[AUTO] Arrived at target!")
+                self.autonomous_mode = False
+                self.navigation_state = 'IDLE'
+                self.target_locked = False
+                self.update_hud_message("Arrived at target!")
+            else:
+                print(f"[AUTO] NAVIGATING - Dist: {distance:.2f}m, Heading: {heading_error_deg:+.1f}deg, Vel: {velocity_magnitude:.2f}m/s")
+
+            return yaw_disturbance, pitch_disturbance, roll_disturbance
+
+        # Default: no disturbances
+        return 0.0, 0.0, 0.0
 
     def run(self):
         print("=" * 60)
@@ -1028,9 +1112,14 @@ class Mavic2ProROS2Controller(Robot):
                     self.land()
                 elif key == ord('A'):
                     self.autonomous_mode = True
-                    print(f"[AUTONOMOUS MODE: ENABLED]")
+                    self.navigation_state = 'SEARCHING'
+                    self.target_locked = False
+                    print(f"[AUTONOMOUS MODE: ENABLED - SEARCHING]")
                 elif key == ord('X'):
                     self.autonomous_mode = False
+                    self.navigation_state = 'IDLE'
+                    self.target_locked = False
+                    self.object_absolute_position = None
                     print(f"[AUTONOMOUS MODE: DISABLED]")
 
                 key = self.keyboard.getKey()
@@ -1066,7 +1155,7 @@ class Mavic2ProROS2Controller(Robot):
                 
 
             # Override with autonomous navigation if active
-            if self.autonomous_mode and self.object_absolute_position and self.global_intent.lower() == 'go':
+            if self.autonomous_mode and self.global_intent.lower() == 'go':
                 self.target_yaw_disturbance = nav_yaw
                 self.target_pitch_disturbance = nav_pitch
                 self.target_roll_disturbance = nav_roll
@@ -1164,6 +1253,7 @@ class Mavic2ProROS2Controller(Robot):
 
             # Poll navigation target from hub (10Hz)
             if (time_now - last_nav_poll_time) >= nav_poll_interval:
+                self.poll_autonomous_mode_trigger()
                 self.poll_navigation_target()
                 last_nav_poll_time = time_now
 

@@ -54,6 +54,7 @@ def init_shared_state():
     shared_state['video_frame'] = None
     shared_state['processing_fps'] = 0.0
     shared_state['detection_count'] = 0
+    shared_state['autonomous_mode_trigger'] = False
 
     # AI configuration
     shared_state['global_get_dist'] = 1  # Depth detection enabled by default
@@ -318,6 +319,30 @@ def send_control_command():
         return {'status': 'ok'}, 200
     except Exception as e:
         logger.error(f"Send control command error: {e}")
+        return {'status': 'error', 'message': str(e)}, 500
+
+@app.route('/api/autonomous_mode_trigger', methods=['GET'])
+def get_autonomous_mode_trigger():
+    """Check if autonomous mode should be enabled via voice command"""
+    try:
+        if shared_state:
+            return {'trigger': shared_state.get('autonomous_mode_trigger', False)}, 200
+        return {'trigger': False}, 200
+    except Exception as e:
+        logger.error(f"Get autonomous mode trigger error: {e}")
+        return {'status': 'error', 'message': str(e)}, 500
+
+@app.route('/api/clear_autonomous_trigger', methods=['POST'])
+def clear_autonomous_trigger():
+    """Clear the autonomous mode trigger flag"""
+    try:
+        if shared_state:
+            shared_state['autonomous_mode_trigger'] = False
+            logger.info("Autonomous mode trigger cleared")
+            return {'status': 'ok'}, 200
+        return {'status': 'error', 'message': 'Shared state not initialized'}, 500
+    except Exception as e:
+        logger.error(f"Clear autonomous trigger error: {e}")
         return {'status': 'error', 'message': str(e)}, 500
 
 # ============================================================================

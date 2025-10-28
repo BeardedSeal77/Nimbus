@@ -170,8 +170,11 @@ def run_ai_worker(shared_state):
                                 worker_config['GLOBAL_INTENT'] = result['intent']
                                 shared_state['global_intent'] = result['intent']
                                 if result['intent'].lower() == 'go':
+                                    # Clear old position before calculating new one
+                                    shared_state['object_absolute_position'] = None
                                     shared_state['calculate_position_trigger'] = True
-                                    logger.info("Position calculation trigger SET (intent='go')")
+                                    shared_state['autonomous_mode_trigger'] = True
+                                    logger.info("Position cleared + calculation trigger SET + autonomous trigger SET (intent='go')")
                                 elif result['intent'].lower() == 'home':
                                     shared_state['object_absolute_position'] = {'x': 0.0, 'y': 0.0, 'z': 0.0}
                                     shared_state['global_object'] = ''
