@@ -260,6 +260,54 @@ def update_drone_video():
         logger.error(f"Update drone video error: {e}")
         return {'status': 'error', 'message': str(e)}, 500
 
+@app.route('/drone/video_stream', methods=['POST'])
+def receive_video_stream():
+    """Receive continuous MJPEG stream from drone"""
+    try:
+        logger.info("MJPEG stream connection established from drone")
+
+        # Read the multipart stream
+        boundary = b'--frame'
+        buffer = b''
+        frame_count = 0
+
+        for chunk in request.stream:
+            buffer += chunk
+
+            # Look for frame boundaries
+            while boundary in buffer:
+                # Find start and end of frame
+                start = buffer.find(boundary)
+                next_boundary = buffer.find(boundary, start + len(boundary))
+
+                if next_boundary == -1:
+                    # Incomplete frame, wait for more data
+                    break
+
+                # Extract frame data
+                frame_data = buffer[start:next_boundary]
+                buffer = buffer[next_boundary:]
+
+                # Parse multipart headers to find JPEG data
+                header_end = frame_data.find(b'\r\n\r\n')
+                if header_end != -1:
+                    jpeg_bytes = frame_data[header_end + 4:]
+
+                    # Store in shared state for /raw_video_feed to serve
+                    if shared_state and len(jpeg_bytes) > 0:
+                        shared_state['raw_video_frame'] = jpeg_bytes
+                        frame_count += 1
+
+                        if frame_count % 30 == 0:
+                            logger.debug(f"MJPEG stream: {frame_count} frames received")
+
+        logger.info(f"MJPEG stream connection closed ({frame_count} frames received)")
+        return {'status': 'ok', 'frames_received': frame_count}, 200
+
+    except Exception as e:
+        logger.error(f"MJPEG stream error: {e}")
+        return {'status': 'error', 'message': str(e)}, 500
+
 @app.route('/drone/state', methods=['GET'])
 def get_drone_state():
     """Shortcut for getting drone state"""
@@ -292,14 +340,22 @@ def get_object_position():
     try:
         if shared_state:
             obj_pos = shared_state.get('object_absolute_position')
-            if obj_pos:
-                return {
-                    'object_position': obj_pos,
-                    'has_position': True,
-                    'intent': shared_state.get('global_intent'),
-                    'object_name': shared_state.get('global_object')
-                }, 200
-        return {'object_position': None, 'has_position': False}, 200
+            intent = shared_state.get('global_intent')
+            obj_name = shared_state.get('global_object')
+
+            # Always return intent and object_name, even if position not calculated yet
+            return {
+                'object_position': obj_pos,
+                'has_position': obj_pos is not None,
+                'intent': intent,
+                'object_name': obj_name
+            }, 200
+        return {
+            'object_position': None,
+            'has_position': False,
+            'intent': None,
+            'object_name': None
+        }, 200
     except Exception as e:
         logger.error(f"Get object position error: {e}")
         return {'status': 'error', 'message': str(e)}, 500

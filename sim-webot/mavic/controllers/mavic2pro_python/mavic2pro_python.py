@@ -250,25 +250,25 @@ class DroneState:
 
 
 class VideoPublisher:
-    """Encodes video frames and publishes to hub via HTTP POST"""
+    """Streams video frames to hub via continuous MJPEG stream"""
 
     def __init__(self, hub_url):
         self.hub_url = hub_url
-        self.encoder_thread = None
+        self.stream_thread = None
         self.running = False
         self.frame_queue = queue.Queue(maxsize=2)
         self.last_publish_time = 0
         self.publish_interval = 0.033  # 30 FPS max
 
     def start(self):
-        """Start the encoding and publishing thread"""
+        """Start the MJPEG streaming thread"""
         self.running = True
 
-        # Start encoding thread
-        self.encoder_thread = threading.Thread(target=self._encoding_loop, daemon=True)
-        self.encoder_thread.start()
+        # Start streaming thread
+        self.stream_thread = threading.Thread(target=self._mjpeg_stream_loop, daemon=True)
+        self.stream_thread.start()
 
-        print(f"Video publisher started - sending to {self.hub_url}/drone/video")
+        print(f"[VIDEO] MJPEG streaming started to {self.hub_url}/drone/video_stream")
 
     def queue_frame(self, image_data, width, height):
         """Queue a frame for encoding (non-blocking, called from main loop)"""
@@ -281,12 +281,12 @@ class VideoPublisher:
         except queue.Full:
             pass  # Drop frame if encoder is behind
 
-    def _encoding_loop(self):
-        """Background thread that encodes and publishes frames"""
+    def _mjpeg_frame_generator(self):
+        """Generate MJPEG multipart frames"""
         while self.running:
             try:
                 # Get frame from queue with timeout
-                image_data, width, height = self.frame_queue.get(timeout=0.1)
+                image_data, width, height = self.frame_queue.get(timeout=0.5)
 
                 if Image is None:
                     continue
@@ -302,38 +302,66 @@ class VideoPublisher:
 
                 # Encode as JPEG
                 buffer = io.BytesIO()
-                img.save(buffer, format='JPEG', quality=85)
+                img.save(buffer, format='JPEG', quality=75, optimize=True)
                 jpeg_bytes = buffer.getvalue()
 
-                # Publish to hub using persistent session
-                try:
-                    _http_session.post(
-                        f"{self.hub_url}/drone/video",
-                        json={
-                            'data': base64.b64encode(jpeg_bytes).decode('ascii'),
-                            'timestamp': current_time,
-                            'width': width,
-                            'height': height
-                        },
-                        timeout=0.01  # 10ms timeout
-                    )
-                    self.last_publish_time = current_time
-                except requests.exceptions.RequestException:
-                    pass  # Silently fail if hub not available
+                # Yield MJPEG frame in multipart format
+                yield (b'--frame\r\n'
+                       b'Content-Type: image/jpeg\r\n'
+                       b'Content-Length: ' + str(len(jpeg_bytes)).encode() + b'\r\n'
+                       b'\r\n' + jpeg_bytes + b'\r\n')
+
+                self.last_publish_time = current_time
 
             except queue.Empty:
                 continue
             except Exception as e:
-                print(f"Error encoding/publishing frame: {e}")
+                print(f"[VIDEO] Error encoding frame: {e}")
+                break
+
+    def _mjpeg_stream_loop(self):
+        """Background thread that streams MJPEG to hub via single persistent connection"""
+        retry_delay = 5.0
+
+        while self.running:
+            try:
+                print(f"[VIDEO] Connecting MJPEG stream to {self.hub_url}/drone/video_stream...")
+
+                # Create streaming POST request with generator
+                response = _http_session.post(
+                    f"{self.hub_url}/drone/video_stream",
+                    data=self._mjpeg_frame_generator(),
+                    headers={
+                        'Content-Type': 'multipart/x-mixed-replace; boundary=frame',
+                        'Connection': 'keep-alive'
+                    },
+                    stream=True,
+                    timeout=None  # No timeout for streaming connection
+                )
+
+                print(f"[VIDEO] MJPEG stream connected (status: {response.status_code})")
+
+                # Keep connection alive - will block until connection closes
+                for _ in response.iter_content(chunk_size=1024):
+                    if not self.running:
+                        break
+
+            except Exception as e:
+                if self.running:
+                    print(f"[VIDEO] Stream disconnected: {e}")
+                    print(f"[VIDEO] Retrying in {retry_delay}s...")
+                    time.sleep(retry_delay)
+                else:
+                    break
 
     def stop(self):
-        """Stop the encoding thread"""
+        """Stop the streaming thread"""
         self.running = False
 
-        if self.encoder_thread and self.encoder_thread.is_alive():
-            self.encoder_thread.join(timeout=1)
+        if self.stream_thread and self.stream_thread.is_alive():
+            self.stream_thread.join(timeout=2)
 
-        print("Video publisher stopped")
+        print("[VIDEO] MJPEG streaming stopped")
 
 
 class ROS2Bridge:
@@ -776,39 +804,58 @@ class Mavic2ProROS2Controller(Robot):
         try:
             response = _http_session.get(
                 f"{CONFIG['HUB_URL']}/api/autonomous_mode_trigger",
-                timeout=0.01
+                timeout=0.05  # Increased from 10ms to 50ms for reliability
             )
             if response.status_code == 200:
                 data = response.json()
-                if data.get('trigger', False):
+                trigger_status = data.get('trigger', False)
+                if trigger_status:
                     self.autonomous_mode = True
                     self.navigation_state = 'SEARCHING'
                     self.target_locked = False
                     print("[AUTONOMOUS MODE: ENABLED via voice command - SEARCHING]")
                     # Clear the trigger
-                    _http_session.post(f"{CONFIG['HUB_URL']}/api/clear_autonomous_trigger", timeout=0.01)
-        except:
-            pass
+                    _http_session.post(f"{CONFIG['HUB_URL']}/api/clear_autonomous_trigger", timeout=0.05)
+            else:
+                print(f"[POLL ERROR] Autonomous trigger endpoint returned status {response.status_code}")
+        except requests.exceptions.Timeout:
+            print(f"[POLL ERROR] Autonomous trigger timeout (hub may be slow)")
+        except requests.exceptions.ConnectionError:
+            print(f"[POLL ERROR] Cannot connect to hub at {CONFIG['HUB_URL']}")
+        except Exception as e:
+            print(f"[POLL ERROR] Autonomous trigger poll failed: {e}")
 
     def poll_navigation_target(self):
         """Poll hub for object absolute position from AI"""
         try:
             response = _http_session.get(
                 f"{CONFIG['HUB_URL']}/navigation/object_position",
-                timeout=0.01
+                timeout=0.05  # Increased from 10ms to 50ms for reliability
             )
             if response.status_code == 200:
                 data = response.json()
-                if data.get('has_position') and data.get('object_position'):
-                    new_object = data['object_name']
 
-                    # If object changed, clear old position and unlock target
+                # Always update intent and object name (even without position)
+                new_intent = data.get('intent')
+                new_object = data.get('object_name')
+
+                if new_intent:
+                    if self.global_intent != new_intent:
+                        print(f"[NAV POLL] Intent updated: {new_intent}")
+                    self.global_intent = new_intent
+                if new_object:
+                    # Check if object changed
                     if self.global_object and new_object != self.global_object:
                         print(f"[AUTO] Object changed from '{self.global_object}' to '{new_object}' - resetting")
                         self.object_absolute_position = None
                         self.target_locked = False
                         self.navigation_state = 'SEARCHING'
+                    elif not self.global_object:
+                        print(f"[NAV POLL] Object set: {new_object}")
+                    self.global_object = new_object
 
+                # Handle position updates
+                if data.get('has_position') and data.get('object_position'):
                     # Track when coordinates are first received
                     if not self.target_locked:
                         self.target_locked = True
@@ -816,15 +863,19 @@ class Mavic2ProROS2Controller(Robot):
                         print(f"[AUTO] Target locked at position: {data['object_position']}")
 
                     self.object_absolute_position = data['object_position']
-                    self.global_intent = data['intent']
-                    self.global_object = new_object
                 else:
                     # Only clear position if we haven't locked target yet
                     if not self.target_locked:
                         self.object_absolute_position = None
                     # If target_locked = True, keep the coordinates even if detection fails
-        except:
-            pass
+            else:
+                print(f"[POLL ERROR] Navigation endpoint returned status {response.status_code}")
+        except requests.exceptions.Timeout:
+            print(f"[POLL ERROR] Navigation target timeout (hub may be slow)")
+        except requests.exceptions.ConnectionError:
+            print(f"[POLL ERROR] Cannot connect to hub at {CONFIG['HUB_URL']}")
+        except Exception as e:
+            print(f"[POLL ERROR] Navigation target poll failed: {e}")
 
     def poll_joystick_yaw(self):
         """Poll hub for joystick yaw"""
@@ -1171,12 +1222,12 @@ class Mavic2ProROS2Controller(Robot):
                 
 
             # Override with autonomous navigation if active
-            if self.autonomous_mode and self.global_intent.lower() == 'go':
+            if self.autonomous_mode and self.global_intent and self.global_intent.lower() == 'go':
                 self.target_yaw_disturbance = nav_yaw
                 self.target_pitch_disturbance = nav_pitch
                 self.target_roll_disturbance = nav_roll
                 # Update HUD to show we are moving toward object
-                if self.last_hud_object != self.global_object:
+                if self.global_object and self.last_hud_object != self.global_object:
                     self.update_hud_message("Moving to "+self.global_object)
                     self.last_hud_object = self.global_object
 
