@@ -49,14 +49,20 @@ except ImportError:
 # This session is shared across all HTTP requests to reduce connection overhead
 _http_session = requests.Session()
 _http_adapter = requests.adapters.HTTPAdapter(
-    pool_connections=10,  # Number of connection pools to cache
-    pool_maxsize=20,      # Maximum connections to save in the pool
-    max_retries=0         # No retries for speed (timeouts are already low)
+    pool_connections=50,   # Number of connection pools to cache (increased for high-frequency requests)
+    pool_maxsize=100,      # Maximum connections to save in the pool (increased to handle rapid polling)
+    max_retries=0          # No retries for speed (timeouts are already low)
 )
 _http_session.mount('http://', _http_adapter)
 _http_session.mount('https://', _http_adapter)
 
-print("[HTTP] Connection pooling initialized (pool_size=20, connections=10)")
+# Force keep-alive headers to ensure connections are reused
+_http_session.headers.update({
+    'Connection': 'keep-alive',
+    'Keep-Alive': 'timeout=60, max=1000'
+})
+
+print("[HTTP] Connection pooling initialized (pool_size=100, connections=50)")
 
 
 # ============================================================================
@@ -1171,7 +1177,7 @@ class Mavic2ProROS2Controller(Robot):
                 
 
             # Override with autonomous navigation if active
-            if self.autonomous_mode and self.global_intent.lower() == 'go':
+            if self.autonomous_mode and self.global_intent and self.global_intent.lower() == 'go':
                 self.target_yaw_disturbance = nav_yaw
                 self.target_pitch_disturbance = nav_pitch
                 self.target_roll_disturbance = nav_roll

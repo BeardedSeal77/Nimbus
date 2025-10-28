@@ -1,17 +1,50 @@
-[AUTO] Moving (1.03m remaining, stopping_dist=1.06m, vel=1.43m/s)
-[AUTO] Moving (1.02m remaining, stopping_dist=1.05m, vel=1.43m/s)
-[AUTO] Moving (1.01m remaining, stopping_dist=1.04m, vel=1.42m/s)
+During handling of the above exception, another exception occurred:
+
 Traceback (most recent call last):
-  File "C:\Users\edcul\Documents\Work\PRJ\Nimbus\sim-webot\mavic\controllers\mavic2pro_python\mavic2pro_python.py", line 1073, in <module>
-    controller.run()
-  File "C:\Users\edcul\Documents\Work\PRJ\Nimbus\sim-webot\mavic\controllers\mavic2pro_python\mavic2pro_python.py", line 896, in run
-    nav_yaw, nav_pitch, nav_roll = self.get_navigation_disturbances()
-                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\edcul\Documents\Work\PRJ\Nimbus\sim-webot\mavic\controllers\mavic2pro_python\mavic2pro_python.py", line 773, in get_navigation_disturbances
-    result = self.navigation_controller.update(
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\edcul\Documents\Work\PRJ\Nimbus\sim-webot\mavic\controllers\mavic2pro_python\PID.py", line 190, in update
-    'stopping_distance': stopping_distance if self.heading_locked else 0,
-                         ^^^^^^^^^^^^^^^^^
-UnboundLocalError: cannot access local variable 'stopping_distance' where it is not associated with a value
-WARNING: 'mavic2pro_python' controller exited with status: 1.
+  File "C:\Users\ED Cullen\Documents\Nimbus\nimbus-ai\services\ai_service.py", line 143, in _processing_loop
+    self._process_frame_with_depth(frame, target_object)
+  File "C:\Users\ED Cullen\Documents\Nimbus\nimbus-ai\services\ai_service.py", line 169, in _process_frame_with_depth
+    detection_result = self.object_detector.detect(target_object, frame)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ED Cullen\Documents\Nimbus\nimbus-ai\classes\object_detect_node_v11.py", line 88, in detect
+    raise RuntimeError(f"Object detection failed: {e}")
+RuntimeError: Object detection failed: CUDA error: the provided PTX was compiled with an unsupported toolchain.
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+2025-10-28 22:53:37,907 - ERROR - Frame processing error: Object detection failed: CUDA error: the provided PTX was compiled with an unsupported toolchain.
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+Traceback (most recent call last):
+  File "C:\Users\ED Cullen\Documents\Nimbus\nimbus-ai\classes\object_detect_node_v11.py", line 56, in detect
+    self.last_results = self.model.predict(
+                        ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ED Cullen\Documents\Nimbus\nimbus-hub\venv\Lib\site-packages\ultralytics\engine\model.py", line 557, in predict
+    return self.predictor.predict_cli(source=source) if is_cli else self.predictor(source=source, stream=stream)
+                                                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ED Cullen\Documents\Nimbus\nimbus-hub\venv\Lib\site-packages\ultralytics\engine\predictor.py", line 230, in __call__
+    return list(self.stream_inference(source, model, *args, **kwargs))  # merge list of Result into one
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ED Cullen\Documents\Nimbus\nimbus-hub\venv\Lib\site-packages\torch\utils\_contextlib.py", line 38, in generator_context
+    response = gen.send(None)
+               ^^^^^^^^^^^^^^
+  File "C:\Users\ED Cullen\Documents\Nimbus\nimbus-hub\venv\Lib\site-packages\ultralytics\engine\predictor.py", line 315, in stream_inference
+    self.model.warmup(
+  File "C:\Users\ED Cullen\Documents\Nimbus\nimbus-hub\venv\Lib\site-packages\ultralytics\nn\autobackend.py", line 888, in warmup
+    non_max_suppression(warmup_boxes)  # warmup NMS
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ED Cullen\Documents\Nimbus\nimbus-hub\venv\Lib\site-packages\ultralytics\utils\nms.py", line 155, in non_max_suppression
+    i = torchvision.ops.nms(boxes, scores, iou_thres)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ED Cullen\Documents\Nimbus\nimbus-hub\venv\Lib\site-packages\torchvision\ops\boxes.py", line 48, in nms
+    return torch.ops.torchvision.nms(boxes, scores, iou_threshold)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ED Cullen\Documents\Nimbus\nimbus-hub\venv\Lib\site-packages\torch\_ops.py", line 1243, in __call__
+    return self._op(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+torch.AcceleratorError: CUDA error: the provided PTX was compiled with an unsupported toolchain.
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
